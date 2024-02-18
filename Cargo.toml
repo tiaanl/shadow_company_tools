@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 byteorder = "1.5.0"
 walkdir = "2.4.0"
+
+[workspace]
+members = [".", "tools/gut"]
