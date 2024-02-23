@@ -152,6 +152,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "smf"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+ "clap",
+ "shadow_company_tools",
+]
+
+[[package]]
 name = "strsim"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

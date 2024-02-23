@@ -1,3 +1,6 @@
+use byteorder::ReadBytesExt;
+use std::io::Cursor;
+
 const HASH_LOOKUP_TABLE: [u16; 256] = [
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7, 0x8108, 0x9129, 0xA14A, 0xB16B,
     0xC18C, 0xD1AD, 0xE1CE, 0xF1EF, 0x1231, 0x210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
@@ -70,4 +73,29 @@ pub fn decrypt_buf(s: &mut [u8]) {
         s[i] = !s[i];
         i += 1;
     }
+}
+
+pub fn print_buf(c: &mut Cursor<Vec<u8>>, len: usize) {
+    for i in 0..len {
+        let ch = c.read_u8().unwrap();
+        println!("({:04}) [{:02X}] {}", i, ch, ch as char);
+    }
+}
+
+pub fn read_fixed_string(c: &mut impl std::io::Read, len: usize) -> String {
+    let mut s = String::with_capacity(len);
+    let mut len = len - 1;
+    loop {
+        let ch = c.read_u8().unwrap();
+        if ch == 0 {
+            break;
+        }
+        s.push(ch as char);
+        len -= 1;
+    }
+    while len != 0 {
+        c.read_u8().unwrap();
+        len -= 1;
+    }
+    s
 }
