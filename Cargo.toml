@@ -10,4 +10,4 @@ byteorder = "1.5.0"
 walkdir = "2.4.0"
 
 [workspace]
-members = [".", "tools/gut", "tools/smf"]
+members = [".", "tools/campaigns", "tools/gut", "tools/smf"]

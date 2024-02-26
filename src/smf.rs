@@ -54,7 +54,7 @@ impl Scene {
 }
 
 #[derive(Debug)]
-pub struct Geometry {
+pub struct Mesh {
     pub name: String,
     pub texture_name: String,
     pub vertices: Vec<Vertex>,
@@ -81,7 +81,7 @@ impl Face {
     }
 }
 
-impl Geometry {
+impl Mesh {
     fn read(c: &mut impl std::io::Read) -> Self {
         let name = read_fixed_string(c, 128);
         let texture_name = read_fixed_string(c, 128);
@@ -99,7 +99,7 @@ impl Geometry {
             quads.push(Face::read(c));
         }
 
-        Geometry {
+        Mesh {
             name,
             texture_name,
             vertices,
@@ -111,16 +111,9 @@ impl Geometry {
 #[derive(Debug)]
 pub struct Vertex {
     pub index: u32,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub i5: i32,
-    pub u: f32,
-    pub v: f32,
-    pub f8: f32,
-    pub i9: i32,
-    pub i10: i32,
-    pub i11: i32,
+    pub position: (f32, f32, f32),
+    pub tex_coord: (f32, f32),
+    pub normal: (f32, f32, f32),
 }
 
 impl Vertex {
@@ -129,32 +122,25 @@ impl Vertex {
         let x = c.read_f32::<LittleEndian>().unwrap();
         let y = c.read_f32::<LittleEndian>().unwrap();
         let z = c.read_f32::<LittleEndian>().unwrap();
-        let i5 = c.read_i32::<LittleEndian>().unwrap();
+        let _ = c.read_i32::<LittleEndian>().unwrap(); // usualle == -1
+        let _ = c.read_f32::<LittleEndian>().unwrap(); // usually == 0.0
         let u = c.read_f32::<LittleEndian>().unwrap();
         let v = c.read_f32::<LittleEndian>().unwrap();
-        let f8 = c.read_f32::<LittleEndian>().unwrap();
-        let i9 = c.read_i32::<LittleEndian>().unwrap();
-        let i10 = c.read_i32::<LittleEndian>().unwrap();
-        let i11 = c.read_i32::<LittleEndian>().unwrap();
+        let n_x = c.read_f32::<LittleEndian>().unwrap();
+        let n_y = c.read_f32::<LittleEndian>().unwrap();
+        let n_z = c.read_f32::<LittleEndian>().unwrap();
 
         Vertex {
             index,
-            x,
-            y,
-            z,
-            i5,
-            u,
-            v,
-            f8,
-            i9,
-            i10,
-            i11,
+            position: (x, y, z),
+            tex_coord: (u, v),
+            normal: (n_x, n_y, n_z),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct SubSub2 {
+pub struct CollisionBox {
     pub u1: f32,
     pub u2: f32,
     pub u3: f32,
@@ -164,7 +150,7 @@ pub struct SubSub2 {
     pub u7: f32,
 }
 
-impl SubSub2 {
+impl CollisionBox {
     fn read(c: &mut impl std::io::Read) -> Self {
         let u1 = c.read_f32::<LittleEndian>().unwrap();
         let u2 = c.read_f32::<LittleEndian>().unwrap();
@@ -174,7 +160,7 @@ impl SubSub2 {
         let u6 = c.read_f32::<LittleEndian>().unwrap();
         let u7 = c.read_f32::<LittleEndian>().unwrap();
 
-        SubSub2 {
+        CollisionBox {
             u1,
             u2,
             u3,
@@ -190,18 +176,9 @@ impl SubSub2 {
 pub struct Model {
     pub name: String,
     pub parent_name: String,
-
-    pub u1: u32,
-    pub u2: u32,
-    pub u3: u32,
-    pub u4: u32,
-    pub u5: u32,
-    pub u6: u32,
-    pub u7: u32,
-    pub u8: u32,
-
-    pub meshes: Vec<Geometry>,
-    pub sub_sub_2: Vec<SubSub2>,
+    pub position: (f32, f32, f32),
+    pub meshes: Vec<Mesh>,
+    pub collision_boxes: Vec<CollisionBox>,
 }
 
 impl Model {
@@ -209,47 +186,42 @@ impl Model {
         let name = read_fixed_string(c, 128);
         let parent_name = read_fixed_string(c, 128);
 
-        let u1 = c.read_u32::<LittleEndian>().unwrap();
-        let u2 = c.read_u32::<LittleEndian>().unwrap();
-        let u3 = c.read_u32::<LittleEndian>().unwrap();
-        let u4 = c.read_u32::<LittleEndian>().unwrap();
-        let u5 = c.read_u32::<LittleEndian>().unwrap();
-        let u6 = c.read_u32::<LittleEndian>().unwrap();
-        let u7 = c.read_u32::<LittleEndian>().unwrap();
-        let u8 = c.read_u32::<LittleEndian>().unwrap();
+        let _u1 = c.read_f32::<LittleEndian>().unwrap(); // usuallt == 0.0
+
+        let position_x = c.read_f32::<LittleEndian>().unwrap();
+        let position_y = c.read_f32::<LittleEndian>().unwrap();
+        let position_z = c.read_f32::<LittleEndian>().unwrap();
+
+        // -0.50, 0.50, -0.50, -0.50
+        // -0.50, 0.50,  0.50,  0.50
+        let _u5 = c.read_f32::<LittleEndian>().unwrap();
+        let _u6 = c.read_f32::<LittleEndian>().unwrap();
+        let _u7 = c.read_f32::<LittleEndian>().unwrap();
+        let _u8 = c.read_f32::<LittleEndian>().unwrap();
 
         let geometry_count = c.read_u32::<LittleEndian>().unwrap();
-        let count_2 = c.read_u32::<LittleEndian>().unwrap();
+        let collision_box_count = c.read_u32::<LittleEndian>().unwrap();
 
         if smf_version > 1 {
-            c.read_u32::<LittleEndian>().unwrap();
+            let _ = c.read_u32::<LittleEndian>().unwrap();
         }
 
         let mut geometries = vec![];
         for _ in 0..geometry_count {
-            geometries.push(Geometry::read(c));
+            geometries.push(Mesh::read(c));
         }
 
         let mut sub_sub_2 = vec![];
-        for _ in 0..count_2 {
-            sub_sub_2.push(SubSub2::read(c));
+        for _ in 0..collision_box_count {
+            sub_sub_2.push(CollisionBox::read(c));
         }
 
         Model {
             name,
             parent_name,
-
-            u1,
-            u2,
-            u3,
-            u4,
-            u5,
-            u6,
-            u7,
-            u8,
-
+            position: (position_x, position_y, position_z),
             meshes: geometries,
-            sub_sub_2,
+            collision_boxes: sub_sub_2,
         }
     }
 }
