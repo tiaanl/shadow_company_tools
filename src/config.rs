@@ -1,13 +1,42 @@
+use byteorder::ReadBytesExt;
+
 #[derive(Debug)]
 pub struct ConfigLine {
     pub name: String,
     pub params: Vec<String>,
 }
 
-pub fn read_config_line(cur: &mut impl std::io::BufRead) -> std::io::Result<Option<ConfigLine>> {
-    let mut line = String::new();
+fn read_line<R>(r: &mut R) -> std::io::Result<String>
+where
+    R: std::io::Read + std::io::Seek,
+{
+    let mut str = String::new();
+
+    let mut ch = r.read_u8()?;
+    while ch != 0x0A && ch != 0x0D {
+        str.push(ch as char);
+        ch = r.read_u8()?;
+    }
+
+    // Consume the newline characters.
+    while ch == 0x0A || ch == 0x0D {
+        ch = r.read_u8()?;
+    }
+
+    r.seek(std::io::SeekFrom::Current(-1))?;
+
+    Ok(str)
+}
+
+pub fn read_config_line<R>(r: &mut R) -> std::io::Result<Option<ConfigLine>>
+where
+    R: std::io::Read + std::io::Seek,
+{
+    let mut line;
     loop {
-        if cur.read_line(&mut line)? == 0 {
+        line = read_line(r)?;
+
+        if line.is_empty() {
             return Ok(None);
         }
         line = line

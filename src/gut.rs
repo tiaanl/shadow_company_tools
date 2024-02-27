@@ -9,8 +9,8 @@ use crate::common::{decrypt_buf, hash};
 
 pub struct Entry {
     pub name: String,
-    pub offset: usize,
-    pub size: usize,
+    pub offset: u64,
+    pub size: u64,
     pub is_plain_text: bool,
     pub hash: u32,
 }
@@ -82,8 +82,8 @@ impl GutFile {
                     encrypted_filename[0..(filename_length - 1) as usize].as_mut(),
                 )
                 .to_string(),
-                offset: file_offset as usize + header_size as usize,
-                size: file_size as usize,
+                offset: file_offset as u64 + header_size,
+                size: file_size as u64,
                 is_plain_text: is_text,
                 hash: filename_hash,
             });
@@ -93,7 +93,8 @@ impl GutFile {
     }
 
     pub fn get_contents(&mut self, entry: &Entry) -> &mut [u8] {
-        let data = &mut self.data[entry.offset..entry.offset + entry.size];
+        let data =
+            &mut self.data[entry.offset as usize..entry.offset as usize + entry.size as usize];
         if entry.is_plain_text {
             decrypt_buf(data);
         }
@@ -106,4 +107,51 @@ impl GutFile {
         }
         Ok(())
     }
+}
+
+pub fn read_gut_header<R>(r: &mut R) -> std::io::Result<Vec<Entry>>
+where
+    R: std::io::Read + std::io::Seek,
+{
+    let entry_count = r.read_u32::<LittleEndian>()?;
+
+    // Skip the name of the .gut file, which is a fixed length string
+    // of 32 characters.
+    r.seek(SeekFrom::Current(32))?;
+
+    // According to the offsets for each entry, the header stops here.
+    // Which is 36 bytes from where we started to read.
+
+    let mut entries = Vec::new();
+    entries.reserve(entry_count as usize);
+    for _ in 0..entry_count {
+        let filename_length = r.read_u32::<LittleEndian>().unwrap();
+        let file_size = r.read_u32::<LittleEndian>().unwrap();
+        let file_offset = r.read_u32::<LittleEndian>().unwrap();
+        let is_text = r.read_u32::<LittleEndian>().unwrap() != 0;
+        let filename_hash = r.read_u32::<LittleEndian>().unwrap();
+        let mut encrypted_filename = vec![0; filename_length as usize];
+        r.read_exact(&mut encrypted_filename).unwrap();
+        crate::common::decrypt_buf(encrypted_filename.as_mut());
+
+        if filename_hash != hash(encrypted_filename.as_ref()) {
+            eprintln!(
+                "hashes do not match for file: {}",
+                String::from_utf8_lossy(&encrypted_filename)
+            );
+        }
+
+        entries.push(Entry {
+            name: String::from_utf8_lossy(
+                encrypted_filename[0..(filename_length - 1) as usize].as_mut(),
+            )
+            .to_string(),
+            offset: file_offset as u64 + 36,
+            size: file_size as u64,
+            is_plain_text: is_text,
+            hash: filename_hash,
+        });
+    }
+
+    Ok(entries)
 }

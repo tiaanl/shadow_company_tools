@@ -1,5 +1,4 @@
-use byteorder::ReadBytesExt;
-use std::io::Cursor;
+use byteorder::{LittleEndian, ReadBytesExt};
 
 const HASH_LOOKUP_TABLE: [u16; 256] = [
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7, 0x8108, 0x9129, 0xA14A, 0xB16B,
@@ -36,6 +35,9 @@ pub fn hash(path: &[u8]) -> u32 {
     let mut parts = [0xFFFFu16; 2];
     let mut i = 0;
     loop {
+        if i >= path.len() {
+            break;
+        }
         let ch = {
             if path[i] >= 0x41 && path[i] <= 0x5A {
                 path[i] + 0x20
@@ -43,10 +45,10 @@ pub fn hash(path: &[u8]) -> u32 {
                 path[i]
             }
         };
-
-        if i >= path.len() || ch == 0 {
+        if ch == 0 {
             break;
         }
+
         encode_char(&mut parts[(i & 1) as usize], ch);
         i += 1;
     }
@@ -55,27 +57,10 @@ pub fn hash(path: &[u8]) -> u32 {
 }
 
 pub fn decrypt_buf(s: &mut [u8]) {
-    let mut i = 0;
-    while i < s.len() - 4 {
-        let c1 = s[i];
-        let c2 = s[i + 1];
-        let c3 = s[i + 2];
-        let c4 = s[i + 3];
-        let v = !u32::from_le_bytes([c1, c2, c3, c4]);
-        let [c1, c2, c3, c4] = v.to_le_bytes();
-        s[i] = c1;
-        s[i + 1] = c2;
-        s[i + 2] = c3;
-        s[i + 3] = c4;
-        i += 4;
-    }
-    while i < s.len() {
-        s[i] = !s[i];
-        i += 1;
-    }
+    s.iter_mut().for_each(|c| *c = !*c);
 }
 
-pub fn print_buf(c: &mut Cursor<Vec<u8>>, len: usize) {
+pub fn print_buf(c: &mut impl std::io::Read, len: usize) {
     for i in 0..len {
         let ch = c.read_u8().unwrap();
         println!("({:04}) [{:02X}] {}", i, ch, ch as char);
@@ -98,4 +83,45 @@ pub fn read_fixed_string(c: &mut impl std::io::Read, len: usize) -> String {
         len -= 1;
     }
     s
+}
+
+pub fn skip_sinister_header<R>(r: &mut R) -> std::io::Result<u64>
+where
+    R: std::io::Read + std::io::Seek,
+{
+    use std::io::SeekFrom;
+
+    let header_start = r.seek(SeekFrom::Current(0))?;
+
+    let mut ch = r.read_u8()?;
+    let mut buf = vec![];
+    loop {
+        // Check the first character of the line.
+        if ch != 0x2A {
+            break;
+        }
+
+        // Consume the rest of the line.
+        while ch != 0x0A && ch != 0x0D {
+            buf.push(ch);
+            ch = r.read_u8()?;
+        }
+
+        // Consume the newline characters.
+        while ch == 0x0A || ch == 0x0D {
+            buf.push(ch);
+            ch = r.read_u8()?;
+        }
+    }
+
+    // Read the ID string.
+    // TODO: What is this really??!!
+    // 1A FA 31 C1 | DE ED 42 13
+    let _ = r.read_u32::<LittleEndian>()?;
+    let _ = r.read_u32::<LittleEndian>()?;
+
+    // We read into the data by 1 character, so reverse it.
+    let header_end = r.seek(SeekFrom::Current(-1))?;
+
+    Ok(header_end - header_start)
 }

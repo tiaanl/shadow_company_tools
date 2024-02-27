@@ -1,6 +1,6 @@
 use clap::Parser;
 use shadow_company_tools::config::{read_config_line, ConfigLine};
-use std::{io::Cursor, path::PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 struct Opts {
@@ -8,12 +8,14 @@ struct Opts {
     config_file: PathBuf,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct EmitterConfig {
     pub name: String,
     pub config: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct ClothingInfiltrationMod {
     pub name: String,
@@ -21,6 +23,7 @@ struct ClothingInfiltrationMod {
     pub v2: u32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct Action {
     pub name: String,
@@ -137,16 +140,20 @@ fn read_campaign_line(campaign: &mut Campaign, line: &ConfigLine) -> std::io::Re
 }
 
 fn main() {
-    let opts = Opts::parse();
+    let fm = shadow_company_tools::fm::FileManager::new("C:\\Games\\shadow_company\\Data");
 
-    println!("path: {:?}", opts.config_file);
-    let data = std::fs::read_to_string(opts.config_file).unwrap();
+    let mut file = match fm.open_file("config\\campaign_defs.txt") {
+        Ok(file) => file,
+        Err(e) => {
+            eprintln!("Error: {:?}", e);
+            return;
+        }
+    };
 
     let mut campaigns = vec![];
 
-    let mut cur = Cursor::new(data);
     loop {
-        let Some(line) = read_config_line(&mut cur).unwrap() else {
+        let Some(line) = read_config_line(&mut file).unwrap() else {
             break;
         };
 
