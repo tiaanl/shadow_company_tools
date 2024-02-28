@@ -24,7 +24,8 @@ impl Object {
 
 #[derive(Default)]
 pub struct Map {
-    time_of_day: (u32, u32),
+    pub time_of_day: (u32, u32),
+    pub fog: ((f32, f32, f32), f32, f32),
     pub objects: Vec<Object>,
 }
 
@@ -70,10 +71,18 @@ impl Map {
             } else if line.name == "GAME_STATE_TIME_OF_DAY" {
                 self.time_of_day = (
                     line.params[0].parse().unwrap_or(0),
-                    line.params[0].parse().unwrap_or(1),
+                    line.params[0].parse().unwrap_or(0),
                 );
             } else if line.name == "GAME_CONFIG_FOG_ENABLED" {
-                println!("TODO: GAME_CONFIG_FOG_ENABLED");
+                self.fog = (
+                    (
+                        line.params[0].parse().unwrap_or(0.0),
+                        line.params[1].parse().unwrap_or(0.0),
+                        line.params[2].parse().unwrap_or(0.0),
+                    ),
+                    line.params[3].parse().unwrap_or(0.0),
+                    line.params[4].parse().unwrap_or(0.0),
+                )
             } else {
                 if let Some(object) = self.objects.last_mut() {
                     object_line(object, &line);
