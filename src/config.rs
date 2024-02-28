@@ -12,15 +12,29 @@ where
 {
     let mut str = String::new();
 
-    let mut ch = r.read_u8()?;
+    macro_rules! next_char {
+        () => {
+            match r.read_u8() {
+                Ok(ch) => ch,
+                Err(err) => {
+                    if let std::io::ErrorKind::UnexpectedEof = err.kind() {
+                        return Ok("".to_string());
+                    }
+                    return Err(err);
+                }
+            }
+        };
+    }
+
+    let mut ch = next_char!();
     while ch != 0x0A && ch != 0x0D {
         str.push(ch as char);
-        ch = r.read_u8()?;
+        ch = next_char!();
     }
 
     // Consume the newline characters.
     while ch == 0x0A || ch == 0x0D {
-        ch = r.read_u8()?;
+        ch = next_char!();
     }
 
     r.seek(std::io::SeekFrom::Current(-1))?;
@@ -50,16 +64,40 @@ where
         break;
     }
 
-    let mut parts: Vec<String> = line
-        .split('\t')
-        .filter_map(|t| {
-            if !t.is_empty() {
-                Some(t.to_string())
-            } else {
-                None
+    let mut parts = Vec::new();
+    let mut in_quote = false;
+    let mut current_part = String::new();
+
+    for c in line.chars() {
+        match c {
+            '"' => {
+                if in_quote {
+                    parts.push(current_part.clone());
+                    current_part.clear();
+                }
+                in_quote = !in_quote;
             }
-        })
-        .collect();
+            _ if in_quote => {
+                current_part.push(c);
+            }
+            _ if c.is_whitespace() => {
+                if !current_part.is_empty() {
+                    parts.push(current_part.clone());
+                    current_part.clear();
+                }
+            }
+            _ => {
+                current_part.push(c);
+            }
+        }
+    }
+    if !current_part.is_empty() {
+        parts.push(current_part);
+    }
+
+    if parts.len() == 0 {
+        return Ok(None);
+    }
 
     Ok(Some(ConfigLine {
         name: parts.remove(0),

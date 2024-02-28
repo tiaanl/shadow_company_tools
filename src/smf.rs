@@ -19,30 +19,33 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn read(c: &mut impl std::io::Read) -> Self {
-        let version_string = read_fixed_string(c, 16);
+    pub fn read<R>(r: &mut R) -> Self
+    where
+        R: std::io::Read + std::io::Seek,
+    {
+        let version_string = read_fixed_string(r, 16);
         let smf_version = smf_version(&version_string);
 
-        let name = read_fixed_string(c, 128);
+        let name = read_fixed_string(r, 128);
 
-        let scale_x = c.read_f32::<LittleEndian>().unwrap();
-        let scale_y = c.read_f32::<LittleEndian>().unwrap();
-        let scale_z = c.read_f32::<LittleEndian>().unwrap();
+        let scale_x = r.read_f32::<LittleEndian>().unwrap();
+        let scale_y = r.read_f32::<LittleEndian>().unwrap();
+        let scale_z = r.read_f32::<LittleEndian>().unwrap();
 
         // println!("scale: ({scale_x:.2}, {scale_y:.2}, {scale_z:.2})");
 
-        let _u1 = c.read_u32::<LittleEndian>().unwrap();
+        let _u1 = r.read_u32::<LittleEndian>().unwrap();
         // println!("unknown: {:08X}", _u1);
-        let _u2 = c.read_u32::<LittleEndian>().unwrap();
+        let _u2 = r.read_u32::<LittleEndian>().unwrap();
         // println!("unknown: {:08X}", _u2);
 
-        let sub_model_count = c.read_u32::<LittleEndian>().unwrap();
+        let sub_model_count = r.read_u32::<LittleEndian>().unwrap();
 
         // SubModel
 
         let mut sub_models = vec![];
         for _ in 0..sub_model_count {
-            sub_models.push(Model::read(c, smf_version));
+            sub_models.push(Model::read(r, smf_version));
         }
 
         Scene {
