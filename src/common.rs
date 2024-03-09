@@ -1,3 +1,5 @@
+use std::io::SeekFrom;
+
 use byteorder::{LittleEndian, ReadBytesExt};
 
 const HASH_LOOKUP_TABLE: [u16; 256] = [
@@ -89,8 +91,6 @@ pub fn skip_sinister_header<R>(r: &mut R) -> std::io::Result<u64>
 where
     R: std::io::Read + std::io::Seek,
 {
-    use std::io::SeekFrom;
-
     let header_start = r.seek(SeekFrom::Current(0))?;
 
     let mut ch = r.read_u8()?;

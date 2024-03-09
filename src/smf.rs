@@ -11,11 +11,11 @@ fn smf_version(s: &str) -> u32 {
     0
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Scene {
     pub name: String,
     pub scale: (f32, f32, f32),
-    pub models: Vec<Model>,
+    pub nodes: Vec<Node>,
 }
 
 impl Scene {
@@ -32,31 +32,26 @@ impl Scene {
         let scale_y = r.read_f32::<LittleEndian>().unwrap();
         let scale_z = r.read_f32::<LittleEndian>().unwrap();
 
-        // println!("scale: ({scale_x:.2}, {scale_y:.2}, {scale_z:.2})");
+        let _ = r.read_f32::<LittleEndian>().unwrap(); // usually == 1.0
+        let _ = r.read_u32::<LittleEndian>().unwrap(); // usually == 1
 
-        let _u1 = r.read_u32::<LittleEndian>().unwrap();
-        // println!("unknown: {:08X}", _u1);
-        let _u2 = r.read_u32::<LittleEndian>().unwrap();
-        // println!("unknown: {:08X}", _u2);
+        let node_count = r.read_u32::<LittleEndian>().unwrap();
 
-        let sub_model_count = r.read_u32::<LittleEndian>().unwrap();
-
-        // SubModel
-
-        let mut sub_models = vec![];
-        for _ in 0..sub_model_count {
-            sub_models.push(Model::read(r, smf_version));
+        let mut nodes = vec![];
+        nodes.reserve(node_count as usize);
+        for _ in 0..node_count {
+            nodes.push(Node::read(r, smf_version));
         }
 
         Scene {
             name,
             scale: (scale_x, scale_y, scale_z),
-            models: sub_models,
+            nodes,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Mesh {
     pub name: String,
     pub texture_name: String,
@@ -64,7 +59,7 @@ pub struct Mesh {
     pub faces: Vec<Face>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Face {
     pub index: u32,
     pub indices: [u32; 3],
@@ -90,28 +85,30 @@ impl Mesh {
         let texture_name = read_fixed_string(c, 128);
 
         let vertex_count = c.read_u32::<LittleEndian>().unwrap();
-        let quad_count = c.read_u32::<LittleEndian>().unwrap();
+        let face_count = c.read_u32::<LittleEndian>().unwrap();
 
         let mut vertices = vec![];
+        vertices.reserve(vertex_count as usize);
         for _ in 0..vertex_count {
             vertices.push(Vertex::read(c));
         }
 
-        let mut quads = vec![];
-        for _ in 0..quad_count {
-            quads.push(Face::read(c));
+        let mut faces = vec![];
+        faces.reserve(face_count as usize);
+        for _ in 0..face_count {
+            faces.push(Face::read(c));
         }
 
         Mesh {
             name,
             texture_name,
             vertices,
-            faces: quads,
+            faces,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Vertex {
     pub index: u32,
     pub position: (f32, f32, f32),
@@ -125,8 +122,8 @@ impl Vertex {
         let x = c.read_f32::<LittleEndian>().unwrap();
         let y = c.read_f32::<LittleEndian>().unwrap();
         let z = c.read_f32::<LittleEndian>().unwrap();
-        let _ = c.read_i32::<LittleEndian>().unwrap(); // usualle == -1
-        let _ = c.read_f32::<LittleEndian>().unwrap(); // usually == 0.0
+        let _ = c.read_i32::<LittleEndian>().unwrap(); // usually == -1
+        let _ = c.read_i32::<LittleEndian>().unwrap(); // usually == 0.0
         let u = c.read_f32::<LittleEndian>().unwrap();
         let v = c.read_f32::<LittleEndian>().unwrap();
         let n_x = c.read_f32::<LittleEndian>().unwrap();
@@ -142,7 +139,7 @@ impl Vertex {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CollisionBox {
     pub u1: f32,
     pub u2: f32,
@@ -175,56 +172,61 @@ impl CollisionBox {
     }
 }
 
-#[derive(Debug)]
-pub struct Model {
+#[derive(Clone, Debug)]
+pub struct Node {
     pub name: String,
     pub parent_name: String,
     pub position: (f32, f32, f32),
+    pub rotation: (f32, f32, f32, f32),
     pub meshes: Vec<Mesh>,
     pub collision_boxes: Vec<CollisionBox>,
 }
 
-impl Model {
+impl Node {
     fn read(c: &mut impl std::io::Read, smf_version: u32) -> Self {
         let name = read_fixed_string(c, 128);
         let parent_name = read_fixed_string(c, 128);
 
-        let _u1 = c.read_f32::<LittleEndian>().unwrap(); // usuallt == 0.0
+        let _ = c.read_u32::<LittleEndian>().unwrap(); // usually == 0.0
 
-        let position_x = c.read_f32::<LittleEndian>().unwrap();
-        let position_y = c.read_f32::<LittleEndian>().unwrap();
-        let position_z = c.read_f32::<LittleEndian>().unwrap();
+        let px = c.read_f32::<LittleEndian>().unwrap();
+        let py = c.read_f32::<LittleEndian>().unwrap();
+        let pz = c.read_f32::<LittleEndian>().unwrap();
+        let position = (px, py, pz);
 
-        // -0.50, 0.50, -0.50, -0.50
-        // -0.50, 0.50,  0.50,  0.50
-        let _u5 = c.read_f32::<LittleEndian>().unwrap();
-        let _u6 = c.read_f32::<LittleEndian>().unwrap();
-        let _u7 = c.read_f32::<LittleEndian>().unwrap();
-        let _u8 = c.read_f32::<LittleEndian>().unwrap();
+        // Quaternion.
+        let rx = c.read_f32::<LittleEndian>().unwrap();
+        let ry = c.read_f32::<LittleEndian>().unwrap();
+        let rz = c.read_f32::<LittleEndian>().unwrap();
+        let rw = c.read_f32::<LittleEndian>().unwrap();
+        let rotation = (rx, ry, rz, rw);
 
-        let geometry_count = c.read_u32::<LittleEndian>().unwrap();
+        let mesh_count = c.read_u32::<LittleEndian>().unwrap();
         let collision_box_count = c.read_u32::<LittleEndian>().unwrap();
 
         if smf_version > 1 {
             let _ = c.read_u32::<LittleEndian>().unwrap();
         }
 
-        let mut geometries = vec![];
-        for _ in 0..geometry_count {
-            geometries.push(Mesh::read(c));
+        let mut meshes = vec![];
+        meshes.reserve(mesh_count as usize);
+        for _ in 0..mesh_count {
+            meshes.push(Mesh::read(c));
         }
 
-        let mut sub_sub_2 = vec![];
+        let mut collision_boxes = vec![];
+        collision_boxes.reserve(collision_box_count as usize);
         for _ in 0..collision_box_count {
-            sub_sub_2.push(CollisionBox::read(c));
+            collision_boxes.push(CollisionBox::read(c));
         }
 
-        Model {
+        Node {
             name,
             parent_name,
-            position: (position_x, position_y, position_z),
-            meshes: geometries,
-            collision_boxes: sub_sub_2,
+            position,
+            rotation,
+            meshes,
+            collision_boxes,
         }
     }
 }
