@@ -1,0 +1,18 @@
+[package]
+name = "smf2gltf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+base64 = "0.22.0"
+clap = { version = "4.5.1", features = ["derive"] }
+gltf-json = { path = "../../../gltf/gltf-json", features = ["extras", "names"] }
+image = { version = "0.25.0", default-features = false, features = [
+    "bmp",
+    "jpeg",
+    "png",
+    "webp",
+] }
+pathdiff = "0.2.1"
+shadow_company_tools = { path = "../.." }
+walkdir = "2.5"

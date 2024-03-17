@@ -1,4 +1,4 @@
-use crate::common::read_fixed_string;
+use crate::common::{self, read_fixed_string};
 use byteorder::{LittleEndian, ReadBytesExt};
 
 fn smf_version(s: &str) -> u32 {
@@ -19,35 +19,36 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn read<R>(r: &mut R) -> Self
+    pub fn read<R>(r: &mut R) -> std::io::Result<Self>
     where
         R: std::io::Read + std::io::Seek,
     {
+        common::skip_sinister_header(r)?;
+
         let version_string = read_fixed_string(r, 16);
         let smf_version = smf_version(&version_string);
 
         let name = read_fixed_string(r, 128);
 
-        let scale_x = r.read_f32::<LittleEndian>().unwrap();
-        let scale_y = r.read_f32::<LittleEndian>().unwrap();
-        let scale_z = r.read_f32::<LittleEndian>().unwrap();
+        let scale_x = r.read_f32::<LittleEndian>()?;
+        let scale_y = r.read_f32::<LittleEndian>()?;
+        let scale_z = r.read_f32::<LittleEndian>()?;
 
-        let _ = r.read_f32::<LittleEndian>().unwrap(); // usually == 1.0
-        let _ = r.read_u32::<LittleEndian>().unwrap(); // usually == 1
+        let _ = r.read_f32::<LittleEndian>()?; // usually == 1.0
+        let _ = r.read_u32::<LittleEndian>()?; // usually == 1
 
-        let node_count = r.read_u32::<LittleEndian>().unwrap();
+        let node_count = r.read_u32::<LittleEndian>()?;
 
-        let mut nodes = vec![];
-        nodes.reserve(node_count as usize);
+        let mut nodes = Vec::with_capacity(node_count as usize);
         for _ in 0..node_count {
             nodes.push(Node::read(r, smf_version));
         }
 
-        Scene {
+        Ok(Scene {
             name,
             scale: (scale_x, scale_y, scale_z),
             nodes,
-        }
+        })
     }
 }
 
@@ -87,14 +88,12 @@ impl Mesh {
         let vertex_count = c.read_u32::<LittleEndian>().unwrap();
         let face_count = c.read_u32::<LittleEndian>().unwrap();
 
-        let mut vertices = vec![];
-        vertices.reserve(vertex_count as usize);
+        let mut vertices = Vec::with_capacity(vertex_count as usize);
         for _ in 0..vertex_count {
             vertices.push(Vertex::read(c));
         }
 
-        let mut faces = vec![];
-        faces.reserve(face_count as usize);
+        let mut faces = Vec::with_capacity(face_count as usize);
         for _ in 0..face_count {
             faces.push(Face::read(c));
         }
@@ -208,14 +207,12 @@ impl Node {
             let _ = c.read_u32::<LittleEndian>().unwrap();
         }
 
-        let mut meshes = vec![];
-        meshes.reserve(mesh_count as usize);
+        let mut meshes = Vec::with_capacity(mesh_count as usize);
         for _ in 0..mesh_count {
             meshes.push(Mesh::read(c));
         }
 
-        let mut collision_boxes = vec![];
-        collision_boxes.reserve(collision_box_count as usize);
+        let mut collision_boxes = Vec::with_capacity(collision_box_count as usize);
         for _ in 0..collision_box_count {
             collision_boxes.push(CollisionBox::read(c));
         }

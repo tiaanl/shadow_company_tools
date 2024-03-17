@@ -30,7 +30,7 @@ struct Action {
     pub params: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Campaign {
     pub base_name: String,
     pub title: String,
@@ -49,30 +49,6 @@ struct Campaign {
     pub pre_actions: Vec<Action>,
     pub post_actions: Vec<Action>,
     pub preconditions: Vec<Action>,
-}
-
-impl Default for Campaign {
-    fn default() -> Self {
-        Self {
-            base_name: String::new(),
-            title: String::new(),
-            multiplayer_active: false,
-            exclude_from_campaign_tree: false,
-            skip_team_equipment_validation: false,
-            playtest_funds: 0,
-            multiplayer_funds: [0, 0, 0],
-            cutscene: false,
-            disable_team_and_equipping: String::new(),
-            lighting_threshholds: [0, 0],
-            enemy_grenade_use_chance: 0,
-            alarm_audio: String::new(),
-            emitter_configs: vec![],
-            clothing_infiltration_mods: vec![],
-            pre_actions: vec![],
-            post_actions: vec![],
-            preconditions: vec![],
-        }
-    }
 }
 
 fn read_campaign_line(campaign: &mut Campaign, line: &ConfigLine) -> std::io::Result<bool> {
@@ -159,8 +135,8 @@ fn main() {
 
         if line.name == "CAMPAIGN_DEF" {
             campaigns.push(Campaign::default());
-        } else if let Some(mut campaign) = campaigns.last_mut() {
-            read_campaign_line(&mut campaign, &line).unwrap();
+        } else if let Some(campaign) = campaigns.last_mut() {
+            read_campaign_line(campaign, &line).unwrap();
         }
     }
 

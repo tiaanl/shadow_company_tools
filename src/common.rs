@@ -51,7 +51,7 @@ pub fn hash(path: &[u8]) -> u32 {
             break;
         }
 
-        encode_char(&mut parts[(i & 1) as usize], ch);
+        encode_char(&mut parts[i & 1], ch);
         i += 1;
     }
 
@@ -91,7 +91,7 @@ pub fn skip_sinister_header<R>(r: &mut R) -> std::io::Result<u64>
 where
     R: std::io::Read + std::io::Seek,
 {
-    let header_start = r.seek(SeekFrom::Current(0))?;
+    let header_start = r.stream_position()?;
 
     let mut ch = r.read_u8()?;
     let mut buf = vec![];

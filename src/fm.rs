@@ -31,7 +31,7 @@ impl File {
     pub fn size(&mut self) -> std::io::Result<u64> {
         match *self {
             File::Standalone(ref mut handle) => {
-                let pos = handle.seek(std::io::SeekFrom::Current(0))?;
+                let pos = handle.stream_position()?;
                 let size = handle.seek(std::io::SeekFrom::End(0))?;
                 handle.seek(std::io::SeekFrom::Start(pos))?;
                 Ok(size)
@@ -46,7 +46,7 @@ impl std::io::Read for File {
         match *self {
             Self::Standalone(ref mut handle) => handle.read(buf),
             Self::Archived(ref mut handle, offset, size, is_plain_text) => {
-                let current_pos = handle.seek(std::io::SeekFrom::Current(0))? - offset;
+                let current_pos = handle.stream_position()? - offset;
                 if current_pos + buf.len() as u64 > size {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::UnexpectedEof,
@@ -59,7 +59,7 @@ impl std::io::Read for File {
                         ),
                     ));
                 }
-                handle.read(buf)?;
+                handle.read_exact(buf)?;
                 if is_plain_text {
                     crate::common::decrypt_buf(buf);
                 }

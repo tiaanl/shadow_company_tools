@@ -36,7 +36,7 @@ impl GutFile {
         // lines are separated by [0x0D, 0x0A]
         let mut header = vec![];
         for _ in 0..9 {
-            c.read_until('\n' as u8, &mut header).unwrap();
+            c.read_until(b'\n', &mut header).unwrap();
         }
 
         // 8 - Unknown (maybe hash?)
@@ -122,8 +122,7 @@ where
     // According to the offsets for each entry, the header stops here.
     // Which is 36 bytes from where we started to read.
 
-    let mut entries = Vec::new();
-    entries.reserve(entry_count as usize);
+    let mut entries = Vec::with_capacity(entry_count as usize);
     for _ in 0..entry_count {
         let filename_length = r.read_u32::<LittleEndian>().unwrap();
         let file_size = r.read_u32::<LittleEndian>().unwrap();

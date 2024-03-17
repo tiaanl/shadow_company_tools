@@ -57,7 +57,7 @@ where
             .trim_matches(|ch| ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')
             .to_string();
 
-        if line.is_empty() || line.starts_with(";") {
+        if line.is_empty() || line.starts_with(';') {
             line.clear();
             continue;
         }
@@ -95,7 +95,7 @@ where
         parts.push(current_part);
     }
 
-    if parts.len() == 0 {
+    if parts.is_empty() {
         return Ok(None);
     }
 

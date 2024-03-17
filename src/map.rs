@@ -47,6 +47,8 @@ fn object_line(object: &mut Object, line: &ConfigLine) {
             line.params[0].parse().unwrap(),
             line.params[1].parse().unwrap(),
         );
+    } else if line.name == "OBJECT_MTF_CONFIG" {
+        println!("OBJECT_MTF_CONFIG: {:?}", line.params);
     } else {
         unreachable!(
             "invalid object key: {}({})",
@@ -83,10 +85,8 @@ impl Map {
                     line.params[3].parse().unwrap_or(0.0),
                     line.params[4].parse().unwrap_or(0.0),
                 )
-            } else {
-                if let Some(object) = self.objects.last_mut() {
-                    object_line(object, &line);
-                }
+            } else if let Some(object) = self.objects.last_mut() {
+                object_line(object, &line);
             }
         }
 
