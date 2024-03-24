@@ -15,8 +15,11 @@ use json::validation::USize64;
 
 #[derive(Debug, Parser)]
 struct Opts {
-    /// path to the .smf file you want to operate on
+    /// Path to the .smf file you want to operate on.
     path: PathBuf,
+    /// Print out mesh vertices, index and faces.
+    #[arg(long)]
+    print_mesh_details: bool,
 }
 
 fn main() {
@@ -27,12 +30,12 @@ fn main() {
     let scene = smf::Scene::read(&mut c).expect("Could not read SMF model file.");
 
     println!("Model: {}, scale: {:?}", scene.name, scene.scale);
-    scene.nodes.iter().for_each(|model| {
+    scene.nodes.iter().for_each(|node| {
         println!(
-            "  Node: {} ({}), position: {:?}, rotation: {:?}",
-            model.name, model.parent_name, model.position, model.rotation
+            "  Node({:3}): {} ({}), position: {}, rotation: {}",
+            node.bone_index, node.name, node.parent_name, node.position, node.rotation
         );
-        model.meshes.iter().for_each(|m| {
+        node.meshes.iter().for_each(|m| {
             println!(
                 "    Mesh: {}, texture: {}, vertices: {}",
                 m.name,
@@ -40,24 +43,26 @@ fn main() {
                 m.vertices.len()
             );
 
-            m.vertices.iter().enumerate().for_each(|(i, v)| {
-                println!(
-                    "      vertex {i}: {:9.3} {:9.3} {:9.3}",
-                    v.position.0, v.position.1, v.position.2,
-                );
-            });
-            m.vertices.iter().enumerate().for_each(|(i, v)| {
-                println!(
-                    "      normal {i}: {:9.3} {:9.3} {:9.3}",
-                    v.normal.0, v.normal.1, v.normal.2,
-                );
-            });
-            m.faces.iter().enumerate().for_each(|(i, f)| {
-                println!(
-                    "      index {i}: {:5} {:5} {:5}",
-                    f.indices[0], f.indices[1], f.indices[2]
-                );
-            });
+            if opts.print_mesh_details {
+                m.vertices.iter().enumerate().for_each(|(i, v)| {
+                    println!(
+                        "      vertex {i}: {:9.3} {:9.3} {:9.3}",
+                        v.position.x, v.position.y, v.position.z,
+                    );
+                });
+                m.vertices.iter().enumerate().for_each(|(i, v)| {
+                    println!(
+                        "      normal {i}: {:9.3} {:9.3} {:9.3}",
+                        v.normal.x, v.normal.y, v.normal.z,
+                    );
+                });
+                m.faces.iter().enumerate().for_each(|(i, f)| {
+                    println!(
+                        "      index {i}: {:5} {:5} {:5}",
+                        f.indices[0], f.indices[1], f.indices[2]
+                    );
+                });
+            }
         });
     });
 }

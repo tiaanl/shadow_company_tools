@@ -1,4 +1,4 @@
-use crate::common::{self, read_fixed_string};
+use crate::common::{self, read_fixed_string, Quaternion, Vector};
 use byteorder::{LittleEndian, ReadBytesExt};
 
 fn smf_version(s: &str) -> u32 {
@@ -37,11 +37,13 @@ impl Scene {
         let _ = r.read_f32::<LittleEndian>()?; // usually == 1.0
         let _ = r.read_u32::<LittleEndian>()?; // usually == 1
 
+        // println!("{} {} {} {}", scale_x, scale_y, scale_z, ss);
+
         let node_count = r.read_u32::<LittleEndian>()?;
 
         let mut nodes = Vec::with_capacity(node_count as usize);
         for _ in 0..node_count {
-            nodes.push(Node::read(r, smf_version));
+            nodes.push(Node::read(r, smf_version)?);
         }
 
         Ok(Scene {
@@ -81,7 +83,7 @@ impl Face {
 }
 
 impl Mesh {
-    fn read(c: &mut impl std::io::Read) -> Self {
+    fn read(c: &mut impl std::io::Read) -> std::io::Result<Self> {
         let name = read_fixed_string(c, 128);
         let texture_name = read_fixed_string(c, 128);
 
@@ -90,7 +92,7 @@ impl Mesh {
 
         let mut vertices = Vec::with_capacity(vertex_count as usize);
         for _ in 0..vertex_count {
-            vertices.push(Vertex::read(c));
+            vertices.push(Vertex::read(c)?);
         }
 
         let mut faces = Vec::with_capacity(face_count as usize);
@@ -98,43 +100,39 @@ impl Mesh {
             faces.push(Face::read(c));
         }
 
-        Mesh {
+        Ok(Mesh {
             name,
             texture_name,
             vertices,
             faces,
-        }
+        })
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Vertex {
     pub index: u32,
-    pub position: (f32, f32, f32),
+    pub position: Vector,
     pub tex_coord: (f32, f32),
-    pub normal: (f32, f32, f32),
+    pub normal: Vector,
 }
 
 impl Vertex {
-    fn read(c: &mut impl std::io::Read) -> Self {
-        let index = c.read_u32::<LittleEndian>().unwrap();
-        let x = c.read_f32::<LittleEndian>().unwrap();
-        let y = c.read_f32::<LittleEndian>().unwrap();
-        let z = c.read_f32::<LittleEndian>().unwrap();
-        let _ = c.read_i32::<LittleEndian>().unwrap(); // usually == -1
-        let _ = c.read_i32::<LittleEndian>().unwrap(); // usually == 0.0
-        let u = c.read_f32::<LittleEndian>().unwrap();
-        let v = c.read_f32::<LittleEndian>().unwrap();
-        let n_x = c.read_f32::<LittleEndian>().unwrap();
-        let n_y = c.read_f32::<LittleEndian>().unwrap();
-        let n_z = c.read_f32::<LittleEndian>().unwrap();
+    fn read(c: &mut impl std::io::Read) -> std::io::Result<Self> {
+        let index = c.read_u32::<LittleEndian>()?;
+        let position = Vector::read(c)?;
+        let _ = c.read_i32::<LittleEndian>()?; // usually == -1
+        let _ = c.read_i32::<LittleEndian>()?; // usually == 0.0
+        let u = c.read_f32::<LittleEndian>()?;
+        let v = c.read_f32::<LittleEndian>()?;
+        let normal = Vector::read(c)?;
 
-        Vertex {
+        Ok(Vertex {
             index,
-            position: (x, y, z),
+            position,
             tex_coord: (u, v),
-            normal: (n_x, n_y, n_z),
-        }
+            normal,
+        })
     }
 }
 
@@ -175,41 +173,33 @@ impl CollisionBox {
 pub struct Node {
     pub name: String,
     pub parent_name: String,
-    pub position: (f32, f32, f32),
-    pub rotation: (f32, f32, f32, f32),
+    pub bone_index: u32,
+    pub position: Vector,
+    pub rotation: Quaternion,
     pub meshes: Vec<Mesh>,
     pub collision_boxes: Vec<CollisionBox>,
 }
 
 impl Node {
-    fn read(c: &mut impl std::io::Read, smf_version: u32) -> Self {
+    fn read(c: &mut impl std::io::Read, smf_version: u32) -> std::io::Result<Self> {
         let name = read_fixed_string(c, 128);
         let parent_name = read_fixed_string(c, 128);
 
-        let _ = c.read_u32::<LittleEndian>().unwrap(); // usually == 0.0
+        let bone_index = c.read_u32::<LittleEndian>()?; // usually == 0.0
 
-        let px = c.read_f32::<LittleEndian>().unwrap();
-        let py = c.read_f32::<LittleEndian>().unwrap();
-        let pz = c.read_f32::<LittleEndian>().unwrap();
-        let position = (px, py, pz);
+        let position = Vector::read(c)?;
+        let rotation = Quaternion::read(c)?;
 
-        // Quaternion.
-        let rx = c.read_f32::<LittleEndian>().unwrap();
-        let ry = c.read_f32::<LittleEndian>().unwrap();
-        let rz = c.read_f32::<LittleEndian>().unwrap();
-        let rw = c.read_f32::<LittleEndian>().unwrap();
-        let rotation = (rx, ry, rz, rw);
-
-        let mesh_count = c.read_u32::<LittleEndian>().unwrap();
-        let collision_box_count = c.read_u32::<LittleEndian>().unwrap();
+        let mesh_count = c.read_u32::<LittleEndian>()?;
+        let collision_box_count = c.read_u32::<LittleEndian>()?;
 
         if smf_version > 1 {
-            let _ = c.read_u32::<LittleEndian>().unwrap();
+            let _ = c.read_u32::<LittleEndian>()?;
         }
 
         let mut meshes = Vec::with_capacity(mesh_count as usize);
         for _ in 0..mesh_count {
-            meshes.push(Mesh::read(c));
+            meshes.push(Mesh::read(c)?);
         }
 
         let mut collision_boxes = Vec::with_capacity(collision_box_count as usize);
@@ -217,13 +207,14 @@ impl Node {
             collision_boxes.push(CollisionBox::read(c));
         }
 
-        Node {
+        Ok(Node {
             name,
             parent_name,
+            bone_index,
             position,
             rotation,
             meshes,
             collision_boxes,
-        }
+        })
     }
 }

@@ -1,13 +1,14 @@
+use bitflags::bitflags;
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::common::read_fixed_string;
+use crate::common::{read_fixed_string, Quaternion, Vector};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Bone {
     pub bone_index: u32,
     pub time: u32,
-    pub rotation: [f32; 4],
-    pub position: [f32; 3],
+    pub rotation: Option<Quaternion>,
+    pub position: Option<Vector>,
 }
 
 #[derive(Debug)]
@@ -21,6 +22,13 @@ pub struct Motion {
     pub name: String,
     pub key_frames: Vec<KeyFrame>,
     pub bone_indices: Vec<u32>,
+}
+
+bitflags! {
+    struct KeyFrameFlags : u8 {
+        const HAS_ROTATION = 1 << 0;
+        const HAS_POSITION = 1 << 1;
+    }
 }
 
 impl Motion {
@@ -57,37 +65,33 @@ impl Motion {
             let _ = c.read_u32::<LittleEndian>()?; // always 0
             let _ = c.read_u32::<LittleEndian>()?; // always 0
 
-            let mut bones = vec![];
-            bones.reserve_exact(bone_count as usize);
+            let mut bones = Vec::with_capacity(bone_count as usize);
             for _ in 0..bone_count {
-                let time = c.read_u32::<LittleEndian>()?;
+                let bone_time = c.read_u32::<LittleEndian>()?;
+                assert!(
+                    time == bone_time,
+                    "Keyframe time and bone time do not match!"
+                );
                 let bone_index = c.read_u32::<LittleEndian>()?;
-                let has_rotation = c.read_u8()?;
+                let flags = KeyFrameFlags::from_bits_truncate(c.read_u8()?);
 
-                let (rot_x, rot_y, rot_z, rot_w) = if has_rotation & 1 != 0 {
-                    let x = c.read_f32::<LittleEndian>()?;
-                    let y = c.read_f32::<LittleEndian>()?;
-                    let z = c.read_f32::<LittleEndian>()?;
-                    let w = c.read_f32::<LittleEndian>()?;
-                    (x, y, z, w)
+                let rotation = if flags.contains(KeyFrameFlags::HAS_ROTATION) {
+                    Some(Quaternion::read(c)?)
                 } else {
-                    (1.0, 0.0, 0.0, 0.0)
+                    None
                 };
 
-                let (p_x, p_y, p_z) = if has_rotation & 2 != 0 {
-                    let x = c.read_f32::<LittleEndian>()?;
-                    let y = c.read_f32::<LittleEndian>()?;
-                    let z = c.read_f32::<LittleEndian>()?;
-                    (x, y, z)
+                let position = if flags.contains(KeyFrameFlags::HAS_POSITION) {
+                    Some(Vector::read(c)?)
                 } else {
-                    (0.0, 0.0, 0.0)
+                    None
                 };
 
                 bones.push(Bone {
-                    time,
+                    time: bone_time,
                     bone_index,
-                    rotation: [rot_x, rot_y, rot_z, rot_w],
-                    position: [p_x, p_y, p_z],
+                    rotation,
+                    position,
                 });
             }
 

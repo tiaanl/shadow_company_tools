@@ -2,6 +2,60 @@ use std::io::SeekFrom;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
+#[derive(Clone, Copy, Debug)]
+pub struct Vector {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl Vector {
+    pub fn read<R>(r: &mut R) -> std::io::Result<Self>
+    where
+        R: std::io::Read,
+    {
+        let x = r.read_f32::<LittleEndian>()?;
+        let y = r.read_f32::<LittleEndian>()?;
+        let z = r.read_f32::<LittleEndian>()?;
+
+        Ok(Self { x, y, z })
+    }
+}
+
+impl std::fmt::Display for Vector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {}, {})", self.x, self.y, self.z)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Quaternion {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+impl std::fmt::Display for Quaternion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {}, {}, {})", self.x, self.y, self.z, self.w)
+    }
+}
+
+impl Quaternion {
+    pub fn read<R>(r: &mut R) -> std::io::Result<Self>
+    where
+        R: std::io::Read,
+    {
+        let w = r.read_f32::<LittleEndian>()?;
+        let x = r.read_f32::<LittleEndian>()?;
+        let y = r.read_f32::<LittleEndian>()?;
+        let z = r.read_f32::<LittleEndian>()?;
+
+        Ok(Self { x, y, z, w })
+    }
+}
+
 const HASH_LOOKUP_TABLE: [u16; 256] = [
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7, 0x8108, 0x9129, 0xA14A, 0xB16B,
     0xC18C, 0xD1AD, 0xE1CE, 0xF1EF, 0x1231, 0x210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
