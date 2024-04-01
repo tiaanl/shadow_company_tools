@@ -18,12 +18,12 @@ struct EmitterConfig {
     pub config: String,
 }
 
-impl From<&ConfigLine> for ConfigValue<EmitterConfig> {
+impl From<&ConfigLine> for EmitterConfig {
     fn from(value: &ConfigLine) -> Self {
-        Self(EmitterConfig {
+        Self {
             name: value.params[0].clone(),
             config: value.params[1].clone(),
-        })
+        }
     }
 }
 
@@ -35,6 +35,16 @@ struct ClothingInfiltrationMod {
     pub v2: u32,
 }
 
+impl From<&ConfigLine> for ClothingInfiltrationMod {
+    fn from(value: &ConfigLine) -> Self {
+        Self {
+            name: value.params[0].clone(),
+            v1: value.params[1].parse().unwrap_or(0),
+            v2: value.params[2].parse().unwrap_or(0),
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 struct Action {
@@ -42,67 +52,12 @@ struct Action {
     pub params: Vec<String>,
 }
 
-impl From<&ConfigLine> for ConfigValue<Action> {
+impl From<&ConfigLine> for Action {
     fn from(value: &ConfigLine) -> Self {
-        Self(Action {
+        Self {
             name: value.params[0].clone(),
             params: value.params[1..].to_vec(),
-        })
-    }
-}
-
-struct ConfigValue<T>(T);
-
-impl From<&ConfigLine> for ConfigValue<String> {
-    fn from(value: &ConfigLine) -> Self {
-        Self(value.params[0].clone())
-    }
-}
-
-impl From<&ConfigLine> for ConfigValue<u32> {
-    fn from(value: &ConfigLine) -> Self {
-        Self(value.params[0].parse().unwrap_or(0))
-    }
-}
-
-impl From<&ConfigLine> for ConfigValue<[u32; 2]> {
-    fn from(value: &ConfigLine) -> Self {
-        Self([
-            value.params[0].parse().unwrap_or(0),
-            value.params[1].parse().unwrap_or(0),
-        ])
-    }
-}
-
-impl From<&ConfigLine> for ConfigValue<[u32; 3]> {
-    fn from(value: &ConfigLine) -> Self {
-        Self([
-            value.params[0].parse().unwrap_or(0),
-            value.params[1].parse().unwrap_or(0),
-            value.params[2].parse().unwrap_or(0),
-        ])
-    }
-}
-
-impl From<&ConfigLine> for ConfigValue<bool> {
-    fn from(value: &ConfigLine) -> Self {
-        if value.params.is_empty() {
-            Self(true)
-        } else {
-            // let maybe = value.params[0].parse::<u32>().unwrap();
-            // Self(maybe == 1)
-            todo!("bool is: {}", value.params[0]);
         }
-    }
-}
-
-impl From<&ConfigLine> for ConfigValue<ClothingInfiltrationMod> {
-    fn from(value: &ConfigLine) -> Self {
-        Self(ClothingInfiltrationMod {
-            name: value.params[0].clone(),
-            v1: value.params[1].parse().unwrap_or(0),
-            v2: value.params[2].parse().unwrap_or(0),
-        })
     }
 }
 
@@ -145,15 +100,6 @@ struct Campaign {
 }
 
 fn main() {
-    // let line = ConfigLine {
-    //     name: "TITLE".to_string(),
-    //     params: vec!["Training".to_string()],
-    // };
-
-    // let mut campaign = Campaign::default();
-
-    // campaign.parse_config_line(&line);
-
     let fm = shadow_company_tools::fm::FileManager::new("C:\\Games\\shadow_company\\Data");
 
     let mut file = match fm.open_file("config\\campaign_defs.txt") {
@@ -178,7 +124,26 @@ fn main() {
         }
     }
 
-    for c in campaigns.iter() {
-        println!("Campaign: {} ({})", c.title, c.base_name);
+    use prettytable::{row, Table};
+
+    let mut table = Table::new();
+    table.add_row(row![
+        "Title",
+        "Basename",
+        "Multiplayer",
+        "In campaign",
+        "Cutscene",
+        "Grenade use chance",
+    ]);
+    for campaign in campaigns {
+        table.add_row(row!(
+            campaign.title,
+            campaign.base_name,
+            campaign.multiplayer_active,
+            !campaign.exclude_from_campaign_tree,
+            campaign.cutscene,
+            campaign.enemy_grenade_use_chance,
+        ));
     }
+    table.printstd();
 }

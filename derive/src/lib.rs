@@ -5,27 +5,88 @@ use syn::{parse_macro_input, DeriveInput};
 #[allow(dead_code)]
 #[derive(Debug)]
 enum ConfigType<'a> {
-    Type(&'a syn::Ident),
-    Array(&'a syn::Ident),
-    Vec(&'a syn::Ident),
+    String,
+    U32,
+    Bool,
+    UserType(&'a syn::Ident),
+    Array(Box<ConfigType<'a>>),
+    Vec(Box<ConfigType<'a>>),
 }
 
-fn ident_from_type(ty: &syn::Type) -> Option<&syn::Ident> {
-    match ty {
-        syn::Type::Path(ref path) => path.path.get_ident(),
-        _ => None,
+impl<'a> ConfigType<'a> {
+    fn quote(&self, field_name: &syn::Ident) -> proc_macro2::TokenStream {
+        match self {
+            ConfigType::String | ConfigType::U32 => {
+                let setter = self.convert();
+                quote!(
+                    let __param_index = 0;
+                    self.#field_name = #setter;
+                )
+            }
+            ConfigType::Bool => quote!(
+                self.#field_name = true;
+            ),
+            ConfigType::UserType(ident) => quote!(
+                self.#field_name = #ident::from(line.clone());
+            ),
+            ConfigType::Array(element_type) => {
+                let convert = element_type.convert();
+                quote!(
+                    if line.params.len() < self.#field_name.len() {
+                        panic!("Not enough parameters to fill array!");
+                    }
+
+                    for (__param_index, param) in self.#field_name.iter_mut().enumerate() {
+                        *param = #convert;
+                    }
+                )
+            }
+            ConfigType::Vec(element_type) => {
+                let setter = element_type.convert();
+                quote!(
+                    self.#field_name.push(#setter);
+                )
+            }
+        }
     }
+
+    fn convert(&self) -> proc_macro2::TokenStream {
+        match self {
+            ConfigType::String => quote!(line.params[__param_index].clone()),
+            ConfigType::U32 => quote!(line.params[__param_index].parse().unwrap()),
+            ConfigType::UserType(ident) => quote!(#ident::from(line)),
+            _ => unreachable!("no converter for non native types."),
+        }
+    }
+}
+
+fn native_type_from_type(ty: &syn::Type) -> Option<ConfigType> {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(ident) = type_path.path.get_ident() {
+            if type_path.path.is_ident("String") {
+                return Some(ConfigType::String);
+            } else if type_path.path.is_ident("u32") {
+                return Some(ConfigType::U32);
+            } else if type_path.path.is_ident("bool") {
+                return Some(ConfigType::Bool);
+            } else {
+                return Some(ConfigType::UserType(ident));
+            }
+        }
+    }
+    None
 }
 
 impl<'a> From<&'a syn::Type> for ConfigType<'a> {
     fn from(value: &'a syn::Type) -> Self {
-        if let Some(ident) = ident_from_type(value) {
-            return ConfigType::Type(ident);
+        // Check for native types.
+        if let Some(native_type) = native_type_from_type(value) {
+            return native_type;
         }
 
-        if let syn::Type::Array(array) = value {
-            if let Some(ident) = ident_from_type(array.elem.as_ref()) {
-                return ConfigType::Array(ident);
+        if let syn::Type::Array(type_array) = value {
+            if let Some(native_type) = native_type_from_type(type_array.elem.as_ref()) {
+                return ConfigType::Array(Box::new(native_type));
             }
         }
 
@@ -36,8 +97,8 @@ impl<'a> From<&'a syn::Type> for ConfigType<'a> {
                     if let syn::PathArguments::AngleBracketed(ref args) = first.arguments {
                         if args.args.len() == 1 {
                             if let syn::GenericArgument::Type(ty) = args.args.first().unwrap() {
-                                if let Some(ident) = ident_from_type(ty) {
-                                    return ConfigType::Vec(ident);
+                                if let Some(native_type) = native_type_from_type(ty) {
+                                    return ConfigType::Vec(Box::new(native_type));
                                 }
                             }
                         }
@@ -46,7 +107,24 @@ impl<'a> From<&'a syn::Type> for ConfigType<'a> {
             }
         }
 
-        todo!()
+        match value {
+            syn::Type::Array(_) => todo!("Array"),
+            syn::Type::BareFn(_) => todo!("BareFn"),
+            syn::Type::Group(_) => todo!("Group"),
+            syn::Type::ImplTrait(_) => todo!("ImplTrait"),
+            syn::Type::Infer(_) => todo!("Infer"),
+            syn::Type::Macro(_) => todo!("Macro"),
+            syn::Type::Never(_) => todo!("Never"),
+            syn::Type::Paren(_) => todo!("Paren"),
+            syn::Type::Path(_) => todo!("Path"),
+            syn::Type::Ptr(_) => todo!("Ptr"),
+            syn::Type::Reference(_) => todo!("Reference"),
+            syn::Type::Slice(_) => todo!("Slice"),
+            syn::Type::TraitObject(_) => todo!("TraitObject"),
+            syn::Type::Tuple(_) => todo!("Tuple"),
+            syn::Type::Verbatim(_) => todo!("Verbatim"),
+            _ => todo!("<other>"),
+        }
     }
 }
 
@@ -96,14 +174,10 @@ pub fn parse_line(input: TokenStream) -> TokenStream {
         .map(|parser| {
             let field_name = parser.field_name;
             let key = parser.key_name;
-            match parser.config_type {
-                ConfigType::Type(_) | ConfigType::Array(_) => quote!(#key => {
-                    self.#field_name = ConfigValue::from(line).0;
-                }),
-                ConfigType::Vec(_) => quote!(#key => {
-                    self.#field_name.push(ConfigValue::from(line).0);
-                }),
-            }
+            let setter = parser.config_type.quote(&field_name);
+            quote!(#key => {
+                #setter;
+            })
         })
         .collect::<Vec<_>>();
 
