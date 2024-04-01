@@ -1,5 +1,8 @@
+#![allow(dead_code)]
+
 use clap::Parser;
 use shadow_company_tools::config::{read_config_line, ConfigLine};
+use shadow_company_tools_derive::Config;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -13,6 +16,15 @@ struct Opts {
 struct EmitterConfig {
     pub name: String,
     pub config: String,
+}
+
+impl From<&ConfigLine> for ConfigValue<EmitterConfig> {
+    fn from(value: &ConfigLine) -> Self {
+        Self(EmitterConfig {
+            name: value.params[0].clone(),
+            config: value.params[1].clone(),
+        })
+    }
 }
 
 #[allow(dead_code)]
@@ -30,92 +42,118 @@ struct Action {
     pub params: Vec<String>,
 }
 
-#[derive(Debug, Default)]
+impl From<&ConfigLine> for ConfigValue<Action> {
+    fn from(value: &ConfigLine) -> Self {
+        Self(Action {
+            name: value.params[0].clone(),
+            params: value.params[1..].to_vec(),
+        })
+    }
+}
+
+struct ConfigValue<T>(T);
+
+impl From<&ConfigLine> for ConfigValue<String> {
+    fn from(value: &ConfigLine) -> Self {
+        Self(value.params[0].clone())
+    }
+}
+
+impl From<&ConfigLine> for ConfigValue<u32> {
+    fn from(value: &ConfigLine) -> Self {
+        Self(value.params[0].parse().unwrap_or(0))
+    }
+}
+
+impl From<&ConfigLine> for ConfigValue<[u32; 2]> {
+    fn from(value: &ConfigLine) -> Self {
+        Self([
+            value.params[0].parse().unwrap_or(0),
+            value.params[1].parse().unwrap_or(0),
+        ])
+    }
+}
+
+impl From<&ConfigLine> for ConfigValue<[u32; 3]> {
+    fn from(value: &ConfigLine) -> Self {
+        Self([
+            value.params[0].parse().unwrap_or(0),
+            value.params[1].parse().unwrap_or(0),
+            value.params[2].parse().unwrap_or(0),
+        ])
+    }
+}
+
+impl From<&ConfigLine> for ConfigValue<bool> {
+    fn from(value: &ConfigLine) -> Self {
+        if value.params.is_empty() {
+            Self(true)
+        } else {
+            // let maybe = value.params[0].parse::<u32>().unwrap();
+            // Self(maybe == 1)
+            todo!("bool is: {}", value.params[0]);
+        }
+    }
+}
+
+impl From<&ConfigLine> for ConfigValue<ClothingInfiltrationMod> {
+    fn from(value: &ConfigLine) -> Self {
+        Self(ClothingInfiltrationMod {
+            name: value.params[0].clone(),
+            v1: value.params[1].parse().unwrap_or(0),
+            v2: value.params[2].parse().unwrap_or(0),
+        })
+    }
+}
+
+#[derive(Debug, Default, Config)]
 struct Campaign {
+    #[config("BASENAME")]
     pub base_name: String,
+    #[config("TITLE")]
     pub title: String,
+    #[config("MULTIPLAYER_ACTIVE")]
     pub multiplayer_active: bool,
+    #[config("EXCLUDE_FROM_CAMPAIGN_TREE")]
     pub exclude_from_campaign_tree: bool,
+    #[config("SKIP_TEAM_EQUIPMENT_VALIDATION")]
     pub skip_team_equipment_validation: bool,
+    #[config("PLAYTEST_FUNDS")]
     pub playtest_funds: u32,
+    #[config("MULTIPLAYER_FUNDS")]
     pub multiplayer_funds: [u32; 3],
-    pub cutscene: bool,
+    #[config("CUTSCENE")]
+    pub cutscene: String,
+    #[config("DISABLE_TEAM_AND_EQUIPPING")]
     pub disable_team_and_equipping: String,
+    #[config("LIGHTING_THRESHHOLDS")]
     pub lighting_threshholds: [u32; 2],
+    #[config("ENEMY_GRENADE_USE_CHANCE")]
     pub enemy_grenade_use_chance: u32,
+    #[config("ALARM_AUDIO")]
     pub alarm_audio: String,
+    #[config("EMITTER_CONFIG")]
     pub emitter_configs: Vec<EmitterConfig>,
+    #[config("CLOTHING_INFILTRATION_MOD")]
     pub clothing_infiltration_mods: Vec<ClothingInfiltrationMod>,
+    #[config("PRE_ACTION")]
     pub pre_actions: Vec<Action>,
+    #[config("POST_ACTION")]
     pub post_actions: Vec<Action>,
+    #[config("PRECONDITIONS")]
     pub preconditions: Vec<Action>,
 }
 
-fn read_campaign_line(campaign: &mut Campaign, line: &ConfigLine) -> std::io::Result<bool> {
-    if line.name == "BASENAME" {
-        campaign.base_name = line.params[0].clone();
-    } else if line.name == "TITLE" {
-        campaign.title = line.params[0].clone();
-    } else if line.name == "MULTIPLAYER_ACTIVE" {
-        campaign.multiplayer_active = true;
-    } else if line.name == "EXCLUDE_FROM_CAMPAIGN_TREE" {
-        campaign.exclude_from_campaign_tree = true;
-    } else if line.name == "SKIP_TEAM_EQUIPMENT_VALIDATION" {
-        campaign.skip_team_equipment_validation = true;
-    } else if line.name == "PLAYTEST_FUNDS" {
-        campaign.playtest_funds = line.params[0].parse().unwrap_or(0);
-    } else if line.name == "MULTIPLAYER_FUNDS" {
-        let v1 = line.params[0].parse().unwrap_or(0);
-        let v2 = line.params[0].parse().unwrap_or(0);
-        let v3 = line.params[0].parse().unwrap_or(0);
-        campaign.multiplayer_funds = [v1, v2, v3];
-    } else if line.name == "CUTSCENE" {
-        campaign.cutscene = true;
-    } else if line.name == "DISABLE_TEAM_AND_EQUIPPING" {
-        campaign.disable_team_and_equipping = line.params[0].clone();
-    } else if line.name == "LIGHTING_THRESHHOLDS" {
-        let v1 = line.params[0].parse().unwrap_or(0);
-        let v2 = line.params[0].parse().unwrap_or(0);
-        campaign.lighting_threshholds = [v1, v2];
-    } else if line.name == "ENEMY_GRENADE_USE_CHANCE" {
-        campaign.enemy_grenade_use_chance = line.params[0].parse().unwrap_or(0);
-    } else if line.name == "ALARM_AUDIO" {
-        campaign.alarm_audio = line.params[0].clone();
-    } else if line.name == "EMITTER_CONFIG" {
-        campaign.emitter_configs.push(EmitterConfig {
-            name: line.params[0].clone(),
-            config: line.params[1].clone(),
-        });
-    } else if line.name == "CLOTHING_INFILTRATION_MOD" {
-        campaign
-            .clothing_infiltration_mods
-            .push(ClothingInfiltrationMod {
-                name: line.params[0].clone(),
-                v1: line.params[1].parse().unwrap_or(0),
-                v2: line.params[1].parse().unwrap_or(0),
-            });
-    } else if line.name == "PRE_ACTION" {
-        let name = line.params[0].clone();
-        let params = line.params[1..].to_vec();
-
-        campaign.pre_actions.push(Action { name, params });
-    } else if line.name == "POST_ACTION" {
-        let name = line.params[0].clone();
-        let params = line.params[1..].to_vec();
-
-        campaign.post_actions.push(Action { name, params });
-    } else if line.name == "PRECONDITION" {
-        let name = line.params[0].clone();
-        let params = line.params[1..].to_vec();
-
-        campaign.preconditions.push(Action { name, params });
-    } else {
-        return Ok(false);
-    }
-    Ok(true)
-}
-
 fn main() {
+    // let line = ConfigLine {
+    //     name: "TITLE".to_string(),
+    //     params: vec!["Training".to_string()],
+    // };
+
+    // let mut campaign = Campaign::default();
+
+    // campaign.parse_config_line(&line);
+
     let fm = shadow_company_tools::fm::FileManager::new("C:\\Games\\shadow_company\\Data");
 
     let mut file = match fm.open_file("config\\campaign_defs.txt") {
@@ -136,7 +174,7 @@ fn main() {
         if line.name == "CAMPAIGN_DEF" {
             campaigns.push(Campaign::default());
         } else if let Some(campaign) = campaigns.last_mut() {
-            read_campaign_line(campaign, &line).unwrap();
+            campaign.parse_config_line(&line);
         }
     }
 

@@ -105,9 +105,9 @@ fn smf_to_gltf_json(
     for smf_node in scene.nodes.iter() {
         let mut node = json::Node {
             translation: Some([
-                smf_node.position.0,
-                smf_node.position.2,
-                smf_node.position.1,
+                smf_node.position.x,
+                smf_node.position.z,
+                smf_node.position.y,
             ]),
             name: Some(smf_node.name.clone()),
             ..Default::default()
@@ -127,11 +127,11 @@ fn smf_to_gltf_json(
                 .vertices
                 .iter()
                 .map(|v| VV {
-                    position: [v.position.0, v.position.2, v.position.1],
+                    position: [v.position.x, v.position.z, v.position.y],
                     _normal: [
-                        -normalize!(v.normal.0),
-                        -normalize!(v.normal.2),
-                        -normalize!(v.normal.1),
+                        -normalize!(v.normal.x),
+                        -normalize!(v.normal.z),
+                        -normalize!(v.normal.y),
                     ],
                     _uv: [v.tex_coord.0, v.tex_coord.1, 0.0],
                 })
