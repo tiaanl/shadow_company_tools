@@ -1,6 +1,6 @@
 use crate::{
     common::{read_fixed_string, skip_sinister_header},
-    io::{read_quat, read_vec3},
+    io::GlamReadExt,
 };
 use byteorder::{LittleEndian, ReadBytesExt};
 use glam::{Quat, Vec2, Vec3};
@@ -120,7 +120,7 @@ impl Vertex {
     fn read(c: &mut impl std::io::Read) -> std::io::Result<Self> {
         let index = c.read_u32::<LittleEndian>()?;
 
-        let position = read_vec3(c)?;
+        let position = Vec3::read(c)?;
 
         let _ = c.read_i32::<LittleEndian>()?; // usually == -1
         let _ = c.read_i32::<LittleEndian>()?; // usually == 0.0
@@ -129,7 +129,7 @@ impl Vertex {
         tex_coord.x = c.read_f32::<LittleEndian>()?;
         tex_coord.y = c.read_f32::<LittleEndian>()?;
 
-        let normal = read_vec3(c)?;
+        let normal = Vec3::read(c)?;
 
         Ok(Vertex {
             index,
@@ -191,8 +191,8 @@ impl Node {
 
         let bone_index = c.read_u32::<LittleEndian>()?; // usually == 0.0
 
-        let position = read_vec3(c)?;
-        let rotation = read_quat(c)?;
+        let position = Vec3::read(c)?;
+        let rotation = Quat::read(c)?;
 
         let mesh_count = c.read_u32::<LittleEndian>()?;
         let collision_box_count = c.read_u32::<LittleEndian>()?;

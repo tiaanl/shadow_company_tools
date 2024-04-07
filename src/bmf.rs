@@ -2,7 +2,7 @@ use bitflags::bitflags;
 use byteorder::{LittleEndian, ReadBytesExt};
 use glam::{Quat, Vec3};
 
-use crate::{common::read_fixed_string, io::read_vec3};
+use crate::{common::read_fixed_string, io::GlamReadExt};
 
 #[derive(Clone, Debug)]
 pub struct Bone {
@@ -89,7 +89,7 @@ impl Motion {
                 };
 
                 let position = if flags.contains(KeyFrameFlags::HAS_POSITION) {
-                    Some(read_vec3(c)?)
+                    Some(Vec3::read(c)?)
                 } else {
                     None
                 };
