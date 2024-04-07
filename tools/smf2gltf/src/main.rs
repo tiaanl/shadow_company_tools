@@ -133,7 +133,7 @@ fn smf_to_gltf_json(
                         -normalize!(v.normal.z),
                         -normalize!(v.normal.y),
                     ],
-                    _uv: [v.tex_coord.0, v.tex_coord.1, 0.0],
+                    _uv: [v.tex_coord.x, v.tex_coord.y, 0.0],
                 })
                 .collect::<Vec<_>>();
             let vertex_count = smf_vertices.len();

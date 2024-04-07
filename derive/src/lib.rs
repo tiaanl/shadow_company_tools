@@ -53,7 +53,7 @@ impl<'a> ConfigType<'a> {
     fn convert(&self) -> proc_macro2::TokenStream {
         match self {
             ConfigType::String => quote!(line.params[__param_index].clone()),
-            ConfigType::U32 => quote!(line.params[__param_index].parse().unwrap()),
+            ConfigType::U32 => quote!(line.params[__param_index].parse().unwrap_or(0)),
             ConfigType::UserType(ident) => quote!(#ident::from(line)),
             _ => unreachable!("no converter for non native types."),
         }

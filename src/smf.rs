@@ -1,5 +1,9 @@
-use crate::common::{self, read_fixed_string, Quaternion, Vector};
+use crate::{
+    common::{read_fixed_string, skip_sinister_header},
+    io::{read_quat, read_vec3},
+};
 use byteorder::{LittleEndian, ReadBytesExt};
+use glam::{Quat, Vec2, Vec3};
 
 fn smf_version(s: &str) -> u32 {
     if s.starts_with("SMF V1.0") {
@@ -14,7 +18,7 @@ fn smf_version(s: &str) -> u32 {
 #[derive(Clone, Debug)]
 pub struct Scene {
     pub name: String,
-    pub scale: (f32, f32, f32),
+    pub scale: Vec3,
     pub nodes: Vec<Node>,
 }
 
@@ -23,21 +27,20 @@ impl Scene {
     where
         R: std::io::Read + std::io::Seek,
     {
-        common::skip_sinister_header(r)?;
+        skip_sinister_header(r)?;
 
         let version_string = read_fixed_string(r, 16);
         let smf_version = smf_version(&version_string);
 
         let name = read_fixed_string(r, 128);
 
-        let scale_x = r.read_f32::<LittleEndian>()?;
-        let scale_y = r.read_f32::<LittleEndian>()?;
-        let scale_z = r.read_f32::<LittleEndian>()?;
+        let mut scale = Vec3::ZERO;
+        scale.x = r.read_f32::<LittleEndian>()?;
+        scale.y = r.read_f32::<LittleEndian>()?;
+        scale.z = r.read_f32::<LittleEndian>()?;
 
         let _ = r.read_f32::<LittleEndian>()?; // usually == 1.0
         let _ = r.read_u32::<LittleEndian>()?; // usually == 1
-
-        // println!("{} {} {} {}", scale_x, scale_y, scale_z, ss);
 
         let node_count = r.read_u32::<LittleEndian>()?;
 
@@ -46,11 +49,7 @@ impl Scene {
             nodes.push(Node::read(r, smf_version)?);
         }
 
-        Ok(Scene {
-            name,
-            scale: (scale_x, scale_y, scale_z),
-            nodes,
-        })
+        Ok(Scene { name, scale, nodes })
     }
 }
 
@@ -112,25 +111,30 @@ impl Mesh {
 #[derive(Clone, Debug)]
 pub struct Vertex {
     pub index: u32,
-    pub position: Vector,
-    pub tex_coord: (f32, f32),
-    pub normal: Vector,
+    pub position: Vec3,
+    pub tex_coord: Vec2,
+    pub normal: Vec3,
 }
 
 impl Vertex {
     fn read(c: &mut impl std::io::Read) -> std::io::Result<Self> {
         let index = c.read_u32::<LittleEndian>()?;
-        let position = Vector::read(c)?;
+
+        let position = read_vec3(c)?;
+
         let _ = c.read_i32::<LittleEndian>()?; // usually == -1
         let _ = c.read_i32::<LittleEndian>()?; // usually == 0.0
-        let u = c.read_f32::<LittleEndian>()?;
-        let v = c.read_f32::<LittleEndian>()?;
-        let normal = Vector::read(c)?;
+
+        let mut tex_coord = Vec2::ZERO;
+        tex_coord.x = c.read_f32::<LittleEndian>()?;
+        tex_coord.y = c.read_f32::<LittleEndian>()?;
+
+        let normal = read_vec3(c)?;
 
         Ok(Vertex {
             index,
             position,
-            tex_coord: (u, v),
+            tex_coord,
             normal,
         })
     }
@@ -174,8 +178,8 @@ pub struct Node {
     pub name: String,
     pub parent_name: String,
     pub bone_index: u32,
-    pub position: Vector,
-    pub rotation: Quaternion,
+    pub position: Vec3,
+    pub rotation: Quat,
     pub meshes: Vec<Mesh>,
     pub collision_boxes: Vec<CollisionBox>,
 }
@@ -187,8 +191,8 @@ impl Node {
 
         let bone_index = c.read_u32::<LittleEndian>()?; // usually == 0.0
 
-        let position = Vector::read(c)?;
-        let rotation = Quaternion::read(c)?;
+        let position = read_vec3(c)?;
+        let rotation = read_quat(c)?;
 
         let mesh_count = c.read_u32::<LittleEndian>()?;
         let collision_box_count = c.read_u32::<LittleEndian>()?;

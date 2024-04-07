@@ -1,14 +1,15 @@
 use bitflags::bitflags;
 use byteorder::{LittleEndian, ReadBytesExt};
+use glam::{Quat, Vec3};
 
-use crate::common::{read_fixed_string, Quaternion, Vector};
+use crate::{common::read_fixed_string, io::read_vec3};
 
 #[derive(Clone, Debug)]
 pub struct Bone {
     pub bone_index: u32,
     pub time: u32,
-    pub rotation: Option<Quaternion>,
-    pub position: Option<Vector>,
+    pub rotation: Option<Quat>,
+    pub position: Option<Vec3>,
 }
 
 #[derive(Debug)]
@@ -76,13 +77,19 @@ impl Motion {
                 let flags = KeyFrameFlags::from_bits_truncate(c.read_u8()?);
 
                 let rotation = if flags.contains(KeyFrameFlags::HAS_ROTATION) {
-                    Some(Quaternion::read(c)?)
+                    let mut rotation = Quat::IDENTITY;
+                    rotation.w = c.read_f32::<LittleEndian>()?;
+                    rotation.x = c.read_f32::<LittleEndian>()?;
+                    rotation.y = c.read_f32::<LittleEndian>()?;
+                    rotation.z = c.read_f32::<LittleEndian>()?;
+
+                    Some(rotation)
                 } else {
                     None
                 };
 
                 let position = if flags.contains(KeyFrameFlags::HAS_POSITION) {
-                    Some(Vector::read(c)?)
+                    Some(read_vec3(c)?)
                 } else {
                     None
                 };
