@@ -309,6 +309,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "image_defs"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "shadow_company_tools",
+ "shadow_company_tools_derive",
+]
+
+[[package]]
 name = "inflections"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

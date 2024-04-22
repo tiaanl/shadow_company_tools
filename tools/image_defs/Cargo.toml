@@ -1,0 +1,9 @@
+[package]
+name = "image_defs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.1", features = ["derive"] }
+shadow_company_tools = { path = "../.." }
+shadow_company_tools_derive = { path = "../../derive" }

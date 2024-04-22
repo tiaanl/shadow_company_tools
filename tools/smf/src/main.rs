@@ -32,8 +32,16 @@ fn main() {
     println!("Model: {}, scale: {:?}", scene.name, scene.scale);
     scene.nodes.iter().for_each(|node| {
         println!(
-            "  Node({:3}): {} ({}), position: {}, rotation: {}",
-            node.bone_index, node.name, node.parent_name, node.position, node.rotation
+            "  Node({}): {} ({}), position: {}, rotation: {}",
+            if node.bone_index == 0xFFFFFFFF {
+                "?".to_string()
+            } else {
+                format!("{}", node.bone_index)
+            },
+            node.name,
+            node.parent_name,
+            node.position,
+            node.rotation
         );
         node.meshes.iter().for_each(|m| {
             println!(
@@ -56,6 +64,9 @@ fn main() {
                         v.normal.x, v.normal.y, v.normal.z,
                     );
                 });
+                m.vertices.iter().enumerate().for_each(|(i, v)| {
+                    println!("      uv {i}: {:9.3} {:9.3}", v.tex_coord.x, v.tex_coord.y);
+                });
                 m.faces.iter().enumerate().for_each(|(i, f)| {
                     println!(
                         "      index {i}: {:5} {:5} {:5}",
@@ -63,6 +74,9 @@ fn main() {
                     );
                 });
             }
+        });
+        node.collision_boxes.iter().for_each(|c| {
+            println!("    Collision box: {} {} {}", c.max, c.min, c.u0);
         });
     });
 }

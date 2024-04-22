@@ -16,6 +16,7 @@ members = [
     "tools/campaigns",
     "tools/gut",
     "tools/hash",
+    "tools/image_defs",
     "tools/map",
     "tools/smf",
     "tools/smf2gltf",

@@ -142,34 +142,24 @@ impl Vertex {
 
 #[derive(Clone, Debug)]
 pub struct CollisionBox {
-    pub u1: f32,
-    pub u2: f32,
-    pub u3: f32,
-    pub u4: f32,
-    pub u5: f32,
-    pub u6: f32,
-    pub u7: f32,
+    pub max: Vec3,
+    pub min: Vec3,
+    pub u0: f32,
 }
 
 impl CollisionBox {
     fn read(c: &mut impl std::io::Read) -> Self {
-        let u1 = c.read_f32::<LittleEndian>().unwrap();
-        let u2 = c.read_f32::<LittleEndian>().unwrap();
-        let u3 = c.read_f32::<LittleEndian>().unwrap();
-        let u4 = c.read_f32::<LittleEndian>().unwrap();
-        let u5 = c.read_f32::<LittleEndian>().unwrap();
-        let u6 = c.read_f32::<LittleEndian>().unwrap();
-        let u7 = c.read_f32::<LittleEndian>().unwrap();
+        let mut max = Vec3::ZERO;
+        max.x = c.read_f32::<LittleEndian>().unwrap();
+        max.y = c.read_f32::<LittleEndian>().unwrap();
+        max.z = c.read_f32::<LittleEndian>().unwrap();
+        let mut min = Vec3::ZERO;
+        min.x = c.read_f32::<LittleEndian>().unwrap();
+        min.y = c.read_f32::<LittleEndian>().unwrap();
+        min.z = c.read_f32::<LittleEndian>().unwrap();
+        let u0 = c.read_f32::<LittleEndian>().unwrap();
 
-        CollisionBox {
-            u1,
-            u2,
-            u3,
-            u4,
-            u5,
-            u6,
-            u7,
-        }
+        CollisionBox { max, min, u0 }
     }
 }
 
