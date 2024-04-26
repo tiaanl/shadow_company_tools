@@ -107,7 +107,7 @@ dependencies = [
  "clap",
  "prettytable-rs",
  "shadow_company_tools",
- "shadow_company_tools_derive",
+ "shadow_company_tools_configs",
 ]
 
 [[package]]
@@ -314,7 +314,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "shadow_company_tools",
- "shadow_company_tools_derive",
+ "shadow_company_tools_configs",
 ]
 
 [[package]]
@@ -510,6 +510,14 @@ dependencies = [
  "byteorder",
  "glam",
  "thiserror",
+]
+
+[[package]]
+name = "shadow_company_tools_configs"
+version = "0.1.0"
+dependencies = [
+ "shadow_company_tools",
+ "shadow_company_tools_derive",
 ]
 
 [[package]]

@@ -1,0 +1,8 @@
+[package]
+name = "shadow_company_tools_configs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+shadow_company_tools = { path = ".." }
+shadow_company_tools_derive = { path = "../derive" }
