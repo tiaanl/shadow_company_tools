@@ -16,11 +16,7 @@ enum ConfigType<'a> {
 }
 
 impl<'a> ConfigType<'a> {
-    fn quote(
-        &self,
-        field_name: &syn::Ident,
-        end_name: Option<&String>,
-    ) -> proc_macro2::TokenStream {
+    fn quote(&self, field_name: &syn::Ident, end_type: &EndType) -> proc_macro2::TokenStream {
         match self {
             ConfigType::String | ConfigType::U32 | ConfigType::I32 | ConfigType::F32 => {
                 quote! {
@@ -33,14 +29,14 @@ impl<'a> ConfigType<'a> {
                 reader.next_line()?;
             ),
             ConfigType::UserType(ident) => {
-                let end_part = end_name
-                    .map(|e| quote! { Some(#e) })
-                    .unwrap_or(quote! { None });
+                let end_part = end_type.quote();
 
                 quote! {
                     self.#field_name = #ident::from(line.clone());
                     reader.next_line()?;
-                    self.#field_name.parse_config(reader, #end_part)?;
+                    if #ident::HAS_CONFIG_CHILD_FIELDS {
+                        self.#field_name.parse_config_with_end(reader, #end_part)?;
+                    }
                 }
             }
             ConfigType::Array(_) => {
@@ -57,14 +53,22 @@ impl<'a> ConfigType<'a> {
             }
             ConfigType::Vec(element_type) => {
                 let setter = element_type.convert();
-                let end_part = end_name
-                    .map(|e| quote! { Some(#e) })
-                    .unwrap_or(quote! { None });
+                let end_part = end_type.quote();
+
+                let do_children = if let ConfigType::UserType(ident) = element_type.as_ref() {
+                    quote! {
+                        if #ident::HAS_CONFIG_CHILD_FIELDS {
+                            self.#field_name.last_mut().unwrap().parse_config_with_end(reader, #end_part)?;
+                        }
+                    }
+                } else {
+                    quote! {}
+                };
 
                 quote! {
                     self.#field_name.push(#setter);
                     reader.next_line()?;
-                    self.#field_name.last_mut().unwrap().parse_config(reader, #end_part)?;
+                    #do_children
                 }
             }
         }
@@ -154,11 +158,35 @@ impl<'a> From<&'a syn::Type> for ConfigType<'a> {
     }
 }
 
+/// Owning EndType.
+#[derive(Debug)]
+enum EndType {
+    None,
+    StartKey(String),
+    EndKey(String),
+}
+
+impl EndType {
+    fn quote(&self) -> proc_macro2::TokenStream {
+        match self {
+            EndType::None => {
+                quote! { shadow_company_tools::config::EndType::None }
+            }
+            EndType::StartKey(value) => {
+                quote! { shadow_company_tools::config::EndType::StartKey(#value) }
+            }
+            EndType::EndKey(value) => {
+                quote! { shadow_company_tools::config::EndType::EndKey(#value) }
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Field<'a> {
     field_name: syn::Ident,
     key_name: Option<String>,
-    end_name: Option<String>,
+    end_type: EndType,
     param_index: Option<usize>,
     config_type: ConfigType<'a>,
 }
@@ -196,6 +224,7 @@ fn build_fields(fields: &syn::Fields) -> Result<Vec<Field>, syn::Error> {
             if attr.path().is_ident("config") {
                 let mut key_name = None;
                 let mut end_name = None;
+                let mut is_start_key = None;
 
                 let nested = attr.parse_args_with(
                     syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated,
@@ -216,6 +245,9 @@ fn build_fields(fields: &syn::Fields) -> Result<Vec<Field>, syn::Error> {
                                 ));
                             }
                         }
+                        syn::Expr::Path(ref path) if path.path.is_ident("start") => {
+                            is_start_key = Some(true);
+                        }
                         syn::Expr::Lit(lit) => match lit.lit {
                             syn::Lit::Str(str) => key_name = Some(str.value()),
                             _ => {
@@ -234,10 +266,33 @@ fn build_fields(fields: &syn::Fields) -> Result<Vec<Field>, syn::Error> {
                     }
                 }
 
+                let Some(key_name) = key_name else {
+                    return Err(syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        "Field must have a \"key\".",
+                    ));
+                };
+
                 result.push(Field {
                     field_name: field.ident.clone().unwrap(),
-                    key_name,
-                    end_name,
+                    key_name: Some(key_name.clone()),
+                    end_type: match (end_name, is_start_key) {
+                        (None, None) => EndType::None,
+                        (None, Some(value)) => {
+                            if value {
+                                EndType::StartKey(key_name)
+                            } else {
+                                EndType::None
+                            }
+                        }
+                        (Some(value), None) => EndType::EndKey(value),
+                        (Some(_), Some(_)) => {
+                            return Err(syn::Error::new(
+                                proc_macro2::Span::call_site(),
+                                "Only one of \"start\" or \"end\" keywords allowed.",
+                            ));
+                        }
+                    },
                     param_index: None,
                     config_type: ConfigType::from(&field.ty),
                 });
@@ -247,7 +302,7 @@ fn build_fields(fields: &syn::Fields) -> Result<Vec<Field>, syn::Error> {
                 result.push(Field {
                     field_name: field.ident.clone().unwrap(),
                     key_name: None,
-                    end_name: None,
+                    end_type: EndType::None,
                     param_index: Some(param_index.base10_parse::<usize>().map_err(|_| {
                         syn::Error::new(proc_macro2::Span::call_site(), "Invalid parameter index.")
                     })?),
@@ -277,9 +332,7 @@ pub fn parse_line(input: TokenStream) -> TokenStream {
         .filter(|field| field.key_name.is_some())
         .map(|field| {
             let key = field.key_name.clone().unwrap();
-            let setter = field
-                .config_type
-                .quote(&field.field_name, field.end_name.as_ref());
+            let setter = field.config_type.quote(&field.field_name, &field.end_type);
             quote!(#key => {
                 #setter;
             })
@@ -319,59 +372,83 @@ pub fn parse_line(input: TokenStream) -> TokenStream {
         quote!()
     };
 
+    let has_config_child_fields = if fields.iter().filter(|f| f.key_name.is_some()).count() > 0 {
+        quote! { true }
+    } else {
+        quote! { false }
+    };
+
     // Build the output, possibly using quasi-quotation
     let expanded = quote! {
-        impl #struct_name {
+        impl shadow_company_tools::config::Config for #struct_name {
+            const HAS_CONFIG_CHILD_FIELDS: bool = #has_config_child_fields;
+
             fn parse_config_line<R>(
                 &mut self,
                 reader: &mut shadow_company_tools::config::ConfigReader<R>,
-            ) -> std::io::Result<bool>
+            ) -> shadow_company_tools::config::ParseConfigResult
             where
                 R: std::io::Read + std::io::Seek,
             {
-                debug_assert!(reader.current().is_some());
+                let Some(line) = reader.current() else {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "reader has empty line"
+                    ).into());
+                };
 
-                let line = reader.current().unwrap();
-
-                // println!("{}: Parsing: {}", stringify!(#struct_name), line.name);
+                // println!("  {}: Parsing: {}", stringify!(#struct_name), line.name);
 
                 match line.name.as_str() {
                     #(#setters)*
 
-                    _ => {
+                    name => {
                         // println!("{}: unknown line name: {}", stringify!(#struct_name), line.name);
-                        return Ok(false)
+                        return Err(shadow_company_tools::config::ParseConfigError::InvalidKey(
+                            stringify!(#struct_name).to_string(),
+                            line.name.clone(),
+                        ));
                     },
                 }
 
                 #[allow(unreachable_code)]
-                Ok(true)
+                Ok(())
             }
 
-            pub fn parse_config<R>(
+            fn parse_config_with_end<R>(
                 &mut self,
                 reader: &mut shadow_company_tools::config::ConfigReader<R>,
-                end: Option<&str>,
-            ) -> std::io::Result<()>
+                end_type: shadow_company_tools::config::EndType,
+            ) -> shadow_company_tools::config::ParseConfigResult
             where
                 R: std::io::Read + std::io::Seek,
             {
+                // println!("START {}", stringify!(#struct_name));
                 loop {
-                    if let (Some(line), Some(end)) = (reader.current(), end) {
-                        if line.name == end {
-                            reader.next_line()?;
-                            break;
+                    let Some(line) = reader.current() else {
+                        break;
+                    };
+
+                    match end_type {
+                        shadow_company_tools::config::EndType::None => {}
+                        shadow_company_tools::config::EndType::StartKey(key) => {
+                            if line.name == key {
+                                // println!("found start key, breaking");
+                                break;
+                            }
+                        }
+                        shadow_company_tools::config::EndType::EndKey(key) => {
+                            if line.name == key {
+                                // println!("found end key, breaking");
+                                reader.next_line()?;
+                                break;
+                            }
                         }
                     }
 
-                    if reader.current().is_none() {
-                        break;
-                    }
-
-                    if !self.parse_config_line(reader)? {
-                        break;
-                    }
+                    self.parse_config_line(reader)?;
                 }
+                // println!("END {}", stringify!(#struct_name));
 
                 Ok(())
             }

@@ -1,6 +1,52 @@
 use byteorder::ReadBytesExt;
 
 #[derive(Debug)]
+pub enum EndType {
+    None,
+    StartKey(&'static str),
+    EndKey(&'static str),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseConfigError {
+    #[error("IO Error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Invalid key for \"{0}\": \"{1}\"")]
+    InvalidKey(String, String),
+}
+
+pub type ParseConfigResult = Result<(), ParseConfigError>;
+
+pub trait Config
+where
+    Self: Default + From<&'static ConfigLine>,
+{
+    const HAS_CONFIG_CHILD_FIELDS: bool;
+
+    fn parse_config_line<R>(&mut self, reader: &mut ConfigReader<R>) -> ParseConfigResult
+    where
+        R: std::io::Read + std::io::Seek;
+
+    fn parse_config_with_end<R>(
+        &mut self,
+        reader: &mut ConfigReader<R>,
+        end_type: EndType,
+    ) -> ParseConfigResult
+    where
+        R: std::io::Read + std::io::Seek;
+
+    fn from_config<R>(reader: &mut ConfigReader<R>) -> Result<Self, ParseConfigError>
+    where
+        R: std::io::Read + std::io::Seek,
+    {
+        let mut obj = Self::default();
+        obj.parse_config_with_end(reader, EndType::None)?;
+        Ok(obj)
+    }
+}
+
+#[derive(Debug)]
 pub struct ConfigLine {
     pub name: String,
     pub params: Vec<String>,

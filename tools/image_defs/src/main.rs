@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use clap::Parser;
-use shadow_company_tools::config::ConfigReader;
+use shadow_company_tools::config::{Config, ConfigReader};
 use shadow_company_tools_derive::Config;
 use std::path::PathBuf;
 
@@ -147,10 +147,7 @@ fn main() {
     };
 
     let mut reader = ConfigReader::new(file).expect("failed to read a line from the config");
-    let mut image_defs = ImageDefs::default();
-    image_defs
-        .parse_config(&mut reader, None)
-        .expect("failed to read image_defs");
+    let image_defs = ImageDefs::from_config(&mut reader).expect("failed to read image_defs");
 
     println!("Images:");
     image_defs.images.iter().for_each(|image| {

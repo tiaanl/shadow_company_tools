@@ -1,68 +1,43 @@
-#![allow(dead_code)]
-
 use clap::Parser;
-use shadow_company_tools::config::{read_config_line, ConfigLine};
+use shadow_company_tools::config::{Config, ConfigReader};
 use shadow_company_tools_derive::Config;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 struct Opts {
-    /// Path to the campaign_defs.txt configuration file.
-    config_file: PathBuf,
+    /// Path to the "<Shadow Company>\Data" directory.
+    data_dir: PathBuf,
 }
 
-#[allow(dead_code)]
-#[derive(Debug)]
-struct EmitterConfig {
+#[derive(Config, Debug, Default)]
+pub struct EmitterConfig {
+    #[param(0)]
     pub name: String,
+    #[param(1)]
     pub config: String,
 }
 
-impl From<&ConfigLine> for EmitterConfig {
-    fn from(value: &ConfigLine) -> Self {
-        Self {
-            name: value.params[0].clone(),
-            config: value.params[1].clone(),
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-struct ClothingInfiltrationMod {
+#[derive(Config, Debug, Default)]
+pub struct ClothingInfiltrationMod {
+    #[param(0)]
     pub name: String,
+    #[param(1)]
     pub v1: u32,
+    #[param(2)]
     pub v2: u32,
 }
 
-impl From<&ConfigLine> for ClothingInfiltrationMod {
-    fn from(value: &ConfigLine) -> Self {
-        Self {
-            name: value.params[0].clone(),
-            v1: value.params[1].parse().unwrap_or(0),
-            v2: value.params[2].parse().unwrap_or(0),
-        }
-    }
-}
-
 #[allow(dead_code)]
-#[derive(Debug)]
-struct Action {
+#[derive(Config, Debug, Default)]
+pub struct Action {
+    #[param(0)]
     pub name: String,
+    #[param(1)]
     pub params: Vec<String>,
 }
 
-impl From<&ConfigLine> for Action {
-    fn from(value: &ConfigLine) -> Self {
-        Self {
-            name: value.params[0].clone(),
-            params: value.params[1..].to_vec(),
-        }
-    }
-}
-
-#[derive(Debug, Default, Config)]
-struct Campaign {
+#[derive(Config, Debug, Default)]
+pub struct CampaignDef {
     #[config("BASENAME")]
     pub base_name: String,
     #[config("TITLE")]
@@ -73,6 +48,8 @@ struct Campaign {
     pub exclude_from_campaign_tree: bool,
     #[config("SKIP_TEAM_EQUIPMENT_VALIDATION")]
     pub skip_team_equipment_validation: bool,
+    #[config("DISABLE_HELP_TIPS")]
+    disable_help_tips: bool,
     #[config("PLAYTEST_FUNDS")]
     pub playtest_funds: u32,
     #[config("MULTIPLAYER_FUNDS")]
@@ -95,14 +72,22 @@ struct Campaign {
     pub pre_actions: Vec<Action>,
     #[config("POST_ACTION")]
     pub post_actions: Vec<Action>,
-    #[config("PRECONDITIONS")]
+    #[config("PRECONDITION")]
     pub preconditions: Vec<Action>,
 }
 
-fn main() {
-    let fm = shadow_company_tools::fm::FileManager::new("C:\\Games\\shadow_company\\Data");
+#[derive(Config, Debug, Default)]
+pub struct Campaigns {
+    #[config("CAMPAIGN_DEF", start)]
+    campaign_defs: Vec<CampaignDef>,
+}
 
-    let mut file = match fm.open_file("config\\campaign_defs.txt") {
+fn main() {
+    let opts = Opts::parse();
+
+    let fm = shadow_company_tools::fm::FileManager::new(opts.data_dir);
+
+    let file = match fm.open_file("config\\campaign_defs.txt") {
         Ok(file) => file,
         Err(e) => {
             eprintln!("Error: {:?}", e);
@@ -110,19 +95,14 @@ fn main() {
         }
     };
 
-    let mut campaigns = vec![];
-
-    loop {
-        let Some(line) = read_config_line(&mut file).unwrap() else {
-            break;
-        };
-
-        if line.name == "CAMPAIGN_DEF" {
-            campaigns.push(Campaign::default());
-        } else if let Some(campaign) = campaigns.last_mut() {
-            campaign.parse_config_line(&line);
+    let mut reader = ConfigReader::new(file).expect("failed to create config reader.");
+    let campaigns = match Campaigns::from_config(&mut reader) {
+        Ok(campaigns) => campaigns,
+        Err(err) => {
+            println!("{}", err);
+            return;
         }
-    }
+    };
 
     use prettytable::{row, Table};
 
@@ -135,7 +115,7 @@ fn main() {
         "Cutscene",
         "Grenade use chance",
     ]);
-    for campaign in campaigns {
+    for campaign in campaigns.campaign_defs {
         table.add_row(row!(
             campaign.title,
             campaign.base_name,
