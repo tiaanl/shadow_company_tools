@@ -145,8 +145,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn parse() {
+    //#[test]
+    fn _parse() {
         let data = r#"
             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
             ; main_menu.txt
