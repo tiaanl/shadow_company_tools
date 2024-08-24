@@ -221,7 +221,7 @@ fn build_fields(fields: &syn::Fields) -> Result<Vec<Field>, syn::Error> {
 
     for field in fields.iter() {
         for attr in field.attrs.iter() {
-            if attr.path().is_ident("config") {
+            if attr.path().is_ident("field") {
                 let mut key_name = None;
                 let mut end_name = None;
                 let mut is_start_key = None;
@@ -315,7 +315,7 @@ fn build_fields(fields: &syn::Fields) -> Result<Vec<Field>, syn::Error> {
     Ok(result)
 }
 
-#[proc_macro_derive(Config, attributes(config, param))]
+#[proc_macro_derive(Config, attributes(field, param))]
 pub fn parse_line(input: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
     let input = parse_macro_input!(input as DeriveInput);

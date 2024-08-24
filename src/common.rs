@@ -73,7 +73,7 @@ pub fn read_fixed_string(c: &mut impl std::io::Read, len: usize) -> String {
     let mut len = len - 1;
     loop {
         let ch = c.read_u8().unwrap();
-        if ch == 0 {
+        if ch == 0 || len == 0 {
             break;
         }
         s.push(ch as char);

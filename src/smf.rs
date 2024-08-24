@@ -31,6 +31,9 @@ impl Scene {
 
         let version_string = read_fixed_string(r, 16);
         let smf_version = smf_version(&version_string);
+        if smf_version == 0 {
+            panic!("Invalid smf file version.");
+        }
 
         let name = read_fixed_string(r, 128);
 

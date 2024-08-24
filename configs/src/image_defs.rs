@@ -59,7 +59,7 @@ pub struct Sprite3d {
     #[param(4)]
     pub alpha: i32,
 
-    #[config(key = "SPRITEFRAME")]
+    #[field(key = "SPRITEFRAME")]
     pub sprite_frames: Vec<SpriteFrame>,
 }
 
@@ -100,26 +100,26 @@ pub struct AnimSprite {
     #[param(3)]
     pub height: i32,
 
-    #[config("FRAMEDESCRIPTOR")]
+    #[field("FRAMEDESCRIPTOR")]
     pub frame_descriptor: FrameDescriptor,
-    #[config("FRAMEORDER")]
+    #[field("FRAMEORDER")]
     pub frame_orders: Vec<FrameOrder>,
-    #[config("SPRITEFRAME")]
+    #[field("SPRITEFRAME")]
     pub sprite_frames: Vec<SpriteFrame>,
-    #[config("SPRITEFRAME_XRUN")]
+    #[field("SPRITEFRAME_XRUN")]
     pub sprite_frame_xruns: Vec<SpriteFrameXRun>,
-    #[config("SPRITEFRAME_DXRUN")]
+    #[field("SPRITEFRAME_DXRUN")]
     pub sprite_frame_dxruns: Vec<SpriteFrameDxRun>,
 }
 
 #[derive(Config, Debug, Default)]
 pub struct ImageDefs {
-    #[config("IMAGE")]
+    #[field("IMAGE")]
     pub images: Vec<Image>,
-    #[config("SPRITE3D", end = "ENDDEF")]
+    #[field("SPRITE3D", end = "ENDDEF")]
     pub sprite_3ds: Vec<Sprite3d>,
-    #[config("ANIMSPRITE3D", end = "ENDDEF")]
+    #[field("ANIMSPRITE3D", end = "ENDDEF")]
     pub anim_sprite_3ds: Vec<AnimSprite>,
-    #[config("ANIMSPRITE", end = "ENDDEF")]
+    #[field("ANIMSPRITE", end = "ENDDEF")]
     pub anim_sprites: Vec<AnimSprite>,
 }

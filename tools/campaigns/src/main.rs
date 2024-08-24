@@ -1,6 +1,6 @@
 use clap::Parser;
 use shadow_company_tools::config::{Config, ConfigReader};
-use shadow_company_tools_configs::Campaigns;
+use shadow_company_tools_configs::CampaignDefs;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -23,7 +23,7 @@ fn main() {
     };
 
     let mut reader = ConfigReader::new(file).expect("failed to create config reader.");
-    let campaigns = match Campaigns::from_config(&mut reader) {
+    let campaigns = match CampaignDefs::from_config(&mut reader) {
         Ok(campaigns) => campaigns,
         Err(err) => {
             println!("{}", err);
