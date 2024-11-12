@@ -10,19 +10,24 @@ configs = []
 bitflags = "2.5.0"
 byteorder = "1.5.0"
 glam = "0.27.0"
+image = { version = "0.25.5", default-features = false, features = [
+    "bmp",
+    "jpeg",
+] }
 thiserror = "1.0.59"
 
 [workspace]
 members = [
     ".",
-    "derive",
     "configs",
+    "derive",
     "tools/bmf",
     "tools/campaigns",
     "tools/gut",
     "tools/hash",
     "tools/image_defs",
     "tools/map",
+    "tools/raw2png",
     "tools/smf",
     "tools/smf2gltf",
 ]
