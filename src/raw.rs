@@ -1,30 +1,22 @@
-//! Handles .raw image format.
-//! Raw files are used to store alpha masks for other images or greyscale
+//! Loads .raw image format.
+//! .raw files are used to store alpha masks for other images or greyscale
 //! images like fonts.
 
-use byteorder::ReadBytesExt;
-
-fn reduce_precision(value: u32) -> u32 {
-    (((value >> 4 & 0xf000000 | value & 0xf00000) >> 4 | value & 0xf000) >> 4 | value & 0xf0) >> 4
-}
-
+/// Load a .raw file from the reader and returns it as a single channel grayscale image.
 pub fn load_raw_file<R>(
-    r: &mut R,
+    reader: &mut R,
     width: u32,
     height: u32,
-) -> image::ImageResult<image::GrayAlphaImage>
+) -> image::ImageResult<image::GrayImage>
 where
     R: std::io::Read,
 {
-    let mut image = image::GrayAlphaImage::new(width, height);
+    assert!(width > 0, "Width can not be 0");
+    assert!(height > 0, "Height can not be 0");
 
-    for (_, _, pixel) in image.enumerate_pixels_mut() {
-        let byte = r.read_u8()?;
-        // TODO: This conversion isn't 100% correct, but good enough for now to give the idea.
-        // TODO: This can be simplified a lot.
-        let encoded = reduce_precision(((byte as u32) << 24) | 0xFFFFFF) as u16;
-        *pixel = image::LumaA(encoded.to_le_bytes());
-    }
+    let mut buf = vec![0_u8; width as usize * height as usize];
+    reader.read_exact(&mut buf)?;
 
-    Ok(image)
+    Ok(image::GrayImage::from_vec(width, height, buf)
+        .expect("Not enought bytes from reader. Are the width or height invalid?"))
 }

@@ -1,7 +1,7 @@
 use std::{io::Read, path::PathBuf};
 
 use clap::Parser;
-use image::{GrayAlphaImage, ImageResult, RgbImage, Rgba};
+use image::{GrayImage, ImageResult, RgbImage, Rgba};
 
 #[derive(Parser)]
 struct Opts {
@@ -117,11 +117,7 @@ fn read_bmp_file(bmp_path: &PathBuf) -> ImageResult<RgbImage> {
     Ok(p.into_rgb8())
 }
 
-fn bmp_raw_to_png(
-    png_path: &PathBuf,
-    bmp: &RgbImage,
-    raw: &GrayAlphaImage,
-) -> image::ImageResult<()> {
+fn bmp_raw_to_png(png_path: &PathBuf, bmp: &RgbImage, raw: &GrayImage) -> image::ImageResult<()> {
     assert!(bmp.dimensions() == raw.dimensions());
 
     let mut result = image::RgbaImage::new(bmp.width(), bmp.height());
@@ -130,14 +126,14 @@ fn bmp_raw_to_png(
         .enumerate_pixels_mut()
         .zip(bmp.enumerate_pixels().zip(raw.enumerate_pixels()))
     {
-        *r = Rgba([bmp.0[0], bmp.0[1], bmp.0[2], raw.0[1]]);
+        *r = Rgba([bmp.0[0], bmp.0[1], bmp.0[2], raw.0[0]]);
     }
 
     let mut output = std::fs::File::create(png_path)?;
     result.write_to(&mut output, image::ImageFormat::Png)
 }
 
-fn raw_to_png(png_path: &PathBuf, raw: &GrayAlphaImage) -> image::ImageResult<()> {
+fn raw_to_png(png_path: &PathBuf, raw: &GrayImage) -> image::ImageResult<()> {
     let mut output = std::fs::File::create(png_path)?;
     raw.write_to(&mut output, image::ImageFormat::Png)
 }
