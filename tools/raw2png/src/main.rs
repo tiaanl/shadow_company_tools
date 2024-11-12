@@ -60,13 +60,7 @@ fn convert_to_png(opts: &Opts) -> ImageResult<RgbaImage> {
         let (width, height) = bmp.dimensions();
         let raw = shadow_company_tools::images::load_raw_file(&mut file, width, height)?;
 
-        let mut rgba: RgbaImage = bmp.convert();
-        for (pixel, alpha) in rgba.pixels_mut().zip(raw.pixels()) {
-            // Set the alpha component from the raw image.
-            pixel.0[3] = alpha.0[0];
-        }
-
-        rgba
+        shadow_company_tools::images::combine_bmp_and_raw(&bmp, &raw)
     } else {
         let width = match opts.width {
             Some(value) => value,

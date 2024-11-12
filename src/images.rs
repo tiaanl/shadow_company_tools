@@ -5,7 +5,7 @@
 //! .bmp files are for RGB images.
 //! .pcx files are used for data, such as height maps, a-star map data, etc.
 
-use image::{GrayImage, ImageDecoder, ImageResult, RgbImage};
+use image::{GrayImage, ImageDecoder, ImageResult, RgbImage, RgbaImage};
 
 /// Load a .raw file from the reader and returns it as a single channel grayscale image.
 pub fn load_raw_file<R>(reader: &mut R, width: u32, height: u32) -> ImageResult<GrayImage>
@@ -35,4 +35,18 @@ where
     decoder.read_image(&mut buf)?;
 
     Ok(RgbImage::from_vec(width, height, buf).unwrap())
+}
+
+/// Combine an RGB image (from load_bmp_file) with a grayscale image (from
+/// load_raw_file) to create an RGBA image, using the grayscale image as the alpha channel.
+pub fn combine_bmp_and_raw(bmp: &RgbImage, raw: &GrayImage) -> RgbaImage {
+    use image::buffer::ConvertBuffer;
+
+    let mut rgba: RgbaImage = bmp.convert();
+    for (pixel, alpha) in rgba.pixels_mut().zip(raw.pixels()) {
+        // Set the alpha component from the raw image.
+        pixel.0[3] = alpha.0[0];
+    }
+
+    rgba
 }
