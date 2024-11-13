@@ -27,7 +27,7 @@ fn main() {
 
     let mut c = Cursor::new(std::fs::read(opts.path).unwrap());
 
-    let scene = smf::Scene::read(&mut c).expect("Could not read SMF model file.");
+    let scene = smf::Model::read(&mut c).expect("Could not read SMF model file.");
 
     println!("Model: {}, scale: {:?}", scene.name, scene.scale);
     scene.nodes.iter().for_each(|node| {

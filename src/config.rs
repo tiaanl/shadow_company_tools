@@ -1,5 +1,7 @@
 use byteorder::ReadBytesExt;
 
+use crate::io::Reader;
+
 #[derive(Debug)]
 pub enum EndType {
     None,
@@ -26,7 +28,7 @@ where
 
     fn parse_config_line<R>(&mut self, reader: &mut ConfigReader<R>) -> ParseConfigResult
     where
-        R: std::io::Read + std::io::Seek;
+        R: Reader;
 
     fn parse_config_with_end<R>(
         &mut self,
@@ -34,11 +36,11 @@ where
         end_type: EndType,
     ) -> ParseConfigResult
     where
-        R: std::io::Read + std::io::Seek;
+        R: Reader;
 
     fn from_config<R>(reader: &mut ConfigReader<R>) -> Result<Self, ParseConfigError>
     where
-        R: std::io::Read + std::io::Seek,
+        R: Reader,
     {
         let mut obj = Self::default();
         obj.parse_config_with_end(reader, EndType::None)?;
@@ -96,7 +98,7 @@ impl ConfigLine {
 
 fn read_line<R>(reader: &mut R) -> std::io::Result<String>
 where
-    R: std::io::Read + std::io::Seek,
+    R: Reader,
 {
     let mut str = String::new();
 
@@ -130,7 +132,7 @@ where
 
 pub fn read_config_line<R>(r: &mut R) -> std::io::Result<Option<ConfigLine>>
 where
-    R: std::io::Read + std::io::Seek,
+    R: Reader,
 {
     let mut line;
     loop {
@@ -198,7 +200,7 @@ where
 
 pub struct ConfigReader<T>
 where
-    T: std::io::Read + std::io::Seek,
+    T: Reader,
 {
     reader: T,
     current: Option<ConfigLine>,
@@ -206,7 +208,7 @@ where
 
 impl<R> ConfigReader<R>
 where
-    R: std::io::Read + std::io::Seek,
+    R: Reader,
 {
     pub fn new(reader: R) -> Result<Self, std::io::Error> {
         let mut s = Self {

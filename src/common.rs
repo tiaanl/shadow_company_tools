@@ -1,5 +1,6 @@
-use byteorder::{LittleEndian, ReadBytesExt};
-use std::io::SeekFrom;
+use byteorder::ReadBytesExt;
+
+use crate::io::Reader;
 
 const HASH_LOOKUP_TABLE: [u16; 256] = [
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7, 0x8108, 0x9129, 0xA14A, 0xB16B,
@@ -61,66 +62,10 @@ pub fn decrypt_buf(s: &mut [u8]) {
     s.iter_mut().for_each(|c| *c = !*c);
 }
 
-pub fn print_buf(c: &mut impl std::io::Read, len: usize) {
+pub fn print_buf(r: &mut impl Reader, len: usize) -> std::io::Result<()> {
     for i in 0..len {
-        let ch = c.read_u8().unwrap();
+        let ch = r.read_u8()?;
         println!("({:04}) [{:02X}] {}", i, ch, ch as char);
     }
-}
-
-pub fn read_fixed_string(c: &mut impl std::io::Read, len: usize) -> String {
-    let mut s = String::with_capacity(len);
-    let mut len = len - 1;
-    loop {
-        let ch = c.read_u8().unwrap();
-        if ch == 0 || len == 0 {
-            break;
-        }
-        s.push(ch as char);
-        len -= 1;
-    }
-    while len != 0 {
-        c.read_u8().unwrap();
-        len -= 1;
-    }
-    s
-}
-
-pub fn skip_sinister_header<R>(r: &mut R) -> std::io::Result<u64>
-where
-    R: std::io::Read + std::io::Seek,
-{
-    let header_start = r.stream_position()?;
-
-    let mut ch = r.read_u8()?;
-    let mut buf = vec![];
-    loop {
-        // Check the first character of the line.
-        if ch != 0x2A {
-            break;
-        }
-
-        // Consume the rest of the line.
-        while ch != 0x0A && ch != 0x0D {
-            buf.push(ch);
-            ch = r.read_u8()?;
-        }
-
-        // Consume the newline characters.
-        while ch == 0x0A || ch == 0x0D {
-            buf.push(ch);
-            ch = r.read_u8()?;
-        }
-    }
-
-    // Read the ID string.
-    // TODO: What is this really??!!
-    // 1A FA 31 C1 | DE ED 42 13
-    let _ = r.read_u32::<LittleEndian>()?;
-    let _ = r.read_u32::<LittleEndian>()?;
-
-    // We read into the data by 1 character, so reverse it.
-    let header_end = r.seek(SeekFrom::Current(-1))?;
-
-    Ok(header_end - header_start)
+    Ok(())
 }

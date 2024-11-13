@@ -1,6 +1,9 @@
 use glam::Vec3;
 
-use crate::config::{read_config_line, ConfigLine};
+use crate::{
+    config::{read_config_line, ConfigLine},
+    io::Reader,
+};
 
 #[derive(Debug, Default)]
 pub struct Object {
@@ -44,7 +47,7 @@ fn object_line(object: &mut Object, line: &ConfigLine) {
 impl Map {
     pub fn load<R>(&mut self, mtf_file: &mut R) -> std::io::Result<()>
     where
-        R: std::io::Read + std::io::Seek,
+        R: Reader,
     {
         while let Some(line) = read_config_line(mtf_file)? {
             if line.name == "OBJECT" || line.name == "OBJECT_INVENTORY" {

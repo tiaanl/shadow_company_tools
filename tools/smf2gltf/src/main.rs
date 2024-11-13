@@ -63,7 +63,7 @@ fn convert(path: impl AsRef<Path>, opts: &Opts) -> std::io::Result<()> {
     let to_path = from_path.with_extension("gltf");
 
     let mut file = std::fs::File::open(&from_path)?;
-    let smf = smf::Scene::read(&mut file)?;
+    let smf = smf::Model::read(&mut file)?;
 
     let gltf_json = smf_to_gltf_json(smf, &to_path, opts);
 
@@ -81,7 +81,7 @@ struct VV {
     _uv: [f32; 3],
 }
 
-fn smf_to_gltf_json(scene: smf::Scene, to_path: impl AsRef<Path>, opts: &Opts) -> json::Root {
+fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -> json::Root {
     let mut root = json::Root::default();
 
     let mut root_index = None;

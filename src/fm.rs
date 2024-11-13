@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::common::skip_sinister_header;
+use crate::io::Reader;
 
 #[derive(Debug)]
 pub enum FileManagerError {
@@ -121,7 +121,7 @@ impl FileManager {
         // println!("gut_path: {gut_path:?}");
 
         let mut file = std::fs::File::open(gut_path)?;
-        let header_size = skip_sinister_header(&mut file)?;
+        let header_size = file.skip_sinister_header()?;
 
         let entries = crate::gut::read_gut_header(&mut file)?;
 

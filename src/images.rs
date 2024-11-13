@@ -7,10 +7,12 @@
 
 use image::{GrayImage, ImageDecoder, ImageResult, RgbImage, RgbaImage};
 
+use crate::io::Reader;
+
 /// Load a .raw file from the reader and returns it as a single channel grayscale image.
 pub fn load_raw_file<R>(reader: &mut R, width: u32, height: u32) -> ImageResult<GrayImage>
 where
-    R: std::io::Read,
+    R: Reader,
 {
     assert!(width > 0, "Width can not be 0");
     assert!(height > 0, "Height can not be 0");
@@ -25,7 +27,7 @@ where
 /// Load a .bmp file from the reader and returns it as a RGB image.
 pub fn load_bmp_file<R>(reader: &mut R) -> ImageResult<RgbImage>
 where
-    R: std::io::Read + std::io::Seek,
+    R: Reader,
 {
     use image::codecs::bmp::BmpDecoder;
 

@@ -5,7 +5,10 @@ use std::{
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::common::{decrypt_buf, hash};
+use crate::{
+    common::{decrypt_buf, hash},
+    io::Reader,
+};
 
 pub struct Entry {
     pub name: String,
@@ -109,10 +112,7 @@ impl GutFile {
     }
 }
 
-pub fn read_gut_header<R>(r: &mut R) -> std::io::Result<Vec<Entry>>
-where
-    R: std::io::Read + std::io::Seek,
-{
+pub fn read_gut_header(r: &mut impl Reader) -> std::io::Result<Vec<Entry>> {
     let entry_count = r.read_u32::<LittleEndian>()?;
 
     // Skip the name of the .gut file, which is a fixed length string
