@@ -3,14 +3,12 @@ use glam::{Quat, Vec2, Vec3};
 
 use crate::io::Reader;
 
-fn smf_version(s: &str) -> u32 {
-    if s.starts_with("SMF V1.0") {
-        return 1;
-    }
-    if s.starts_with("SMF V1.1") {
-        return 2;
-    }
-    0
+fn smf_version(s: &str) -> Option<u32> {
+    Some(match s {
+        s if s.starts_with("SMF V1.0") => 1,
+        s if s.starts_with("SMF V1.1") => 2,
+        _ => return None,
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -25,10 +23,12 @@ impl Model {
         let _ = r.skip_sinister_header()?;
 
         let version_string = r.read_fixed_string(16)?;
-        let smf_version = smf_version(&version_string);
-        if smf_version == 0 {
-            panic!("Invalid smf file version.");
-        }
+        let Some(smf_version) = smf_version(&version_string) else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Invalid SMF version.",
+            ));
+        };
 
         let name = r.read_fixed_string(128)?;
 
@@ -141,18 +141,12 @@ pub struct CollisionBox {
 }
 
 impl CollisionBox {
-    fn read(c: &mut impl Reader) -> Self {
-        let mut max = Vec3::ZERO;
-        max.x = c.read_f32::<LE>().unwrap();
-        max.y = c.read_f32::<LE>().unwrap();
-        max.z = c.read_f32::<LE>().unwrap();
-        let mut min = Vec3::ZERO;
-        min.x = c.read_f32::<LE>().unwrap();
-        min.y = c.read_f32::<LE>().unwrap();
-        min.z = c.read_f32::<LE>().unwrap();
-        let u0 = c.read_f32::<LE>().unwrap();
+    fn read(c: &mut impl Reader) -> std::io::Result<Self> {
+        let max = c.read_vec3()?;
+        let min = c.read_vec3()?;
+        let u0 = c.read_f32::<LE>()?;
 
-        CollisionBox { max, min, u0 }
+        Ok(CollisionBox { max, min, u0 })
     }
 }
 
@@ -191,7 +185,7 @@ impl Node {
 
         let mut collision_boxes = Vec::with_capacity(collision_box_count as usize);
         for _ in 0..collision_box_count {
-            collision_boxes.push(CollisionBox::read(r));
+            collision_boxes.push(CollisionBox::read(r)?);
         }
 
         Ok(Node {
