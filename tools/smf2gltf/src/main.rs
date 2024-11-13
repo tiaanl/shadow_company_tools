@@ -21,15 +21,19 @@ struct Opts {
     /// Whether to embed images into the .gltf file.
     #[arg(short, long)]
     embed_images: bool,
+    #[arg(short, long, default_value = "1.0")]
+    scale: f32,
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 fn main() {
     let opts = Opts::parse();
 
     let files = if opts.path.is_file() {
-        vec![opts.path]
+        vec![opts.path.clone()]
     } else {
-        walkdir::WalkDir::new(opts.path)
+        walkdir::WalkDir::new(&opts.path)
             .into_iter()
             .filter_map(Result::ok)
             .filter_map(|p| {
@@ -49,36 +53,24 @@ fn main() {
             .collect()
     };
 
-    for file in files {
-        let texture_path = if let Some(ref texture_path) = opts.texture_path {
-            texture_path.clone()
-        } else {
-            file.parent()
-                .expect("Could not determine texture path.")
-                .to_owned()
-        };
-
-        convert(file, texture_path, opts.embed_images).expect("could not convert file");
-    }
+    files
+        .iter()
+        .for_each(|file| convert(file, &opts).expect("Could not export file."));
 }
 
-fn convert(
-    path: impl AsRef<Path>,
-    texture_path: impl AsRef<Path>,
-    embed_images: bool,
-) -> std::io::Result<()> {
+fn convert(path: impl AsRef<Path>, opts: &Opts) -> std::io::Result<()> {
     let from_path = path.as_ref().to_owned();
     let to_path = from_path.with_extension("gltf");
 
     let mut file = std::fs::File::open(&from_path)?;
     let smf = smf::Scene::read(&mut file)?;
 
-    let gltf_json = smf_to_gltf_json(smf, &to_path, texture_path, embed_images);
+    let gltf_json = smf_to_gltf_json(smf, &to_path, opts);
 
     let writer = std::fs::File::create(&to_path)?;
     json::serialize::to_writer_pretty(writer, &gltf_json)?;
 
-    println!("Wrote to: {}", to_path.display());
+    // println!("Wrote to: {}", to_path.display());
 
     Ok(())
 }
@@ -89,12 +81,7 @@ struct VV {
     _uv: [f32; 3],
 }
 
-fn smf_to_gltf_json(
-    scene: smf::Scene,
-    to_path: impl AsRef<Path>,
-    texture_path: impl AsRef<Path>,
-    embed_images: bool,
-) -> json::Root {
+fn smf_to_gltf_json(scene: smf::Scene, to_path: impl AsRef<Path>, opts: &Opts) -> json::Root {
     let mut root = json::Root::default();
 
     let mut root_index = None;
@@ -105,9 +92,9 @@ fn smf_to_gltf_json(
     for smf_node in scene.nodes.iter() {
         let mut node = json::Node {
             translation: Some([
-                smf_node.position.x,
-                smf_node.position.z,
-                smf_node.position.y,
+                smf_node.position.x * opts.scale,
+                smf_node.position.z * opts.scale,
+                smf_node.position.y * opts.scale,
             ]),
             name: Some(smf_node.name.clone()),
             ..Default::default()
@@ -127,7 +114,11 @@ fn smf_to_gltf_json(
                 .vertices
                 .iter()
                 .map(|v| VV {
-                    position: [v.position.x, v.position.z, v.position.y],
+                    position: [
+                        v.position.x * opts.scale,
+                        v.position.z * opts.scale,
+                        v.position.y * opts.scale,
+                    ],
                     _normal: [
                         -normalize!(v.normal.x),
                         -normalize!(v.normal.z),
@@ -252,11 +243,20 @@ fn smf_to_gltf_json(
             let material_i = if let Some(mat) = material_indices.get(&smf_mesh.texture_name) {
                 *mat
             } else {
+                let texture_path = if let Some(ref texture_path) = opts.texture_path {
+                    texture_path.clone()
+                } else {
+                    to_path
+                        .as_ref()
+                        .parent()
+                        .expect("Could not get directory parent.")
+                        .to_path_buf()
+                };
                 let image_path = if let Some(image_path) =
                     find_image_path(&texture_path, &smf_mesh.texture_name)
                 {
-                    if embed_images {
-                        println!("Embedding image: {}", image_path.display());
+                    if opts.embed_images {
+                        // println!("Embedding image: {}", image_path.display());
                         image_to_buffer(image_path).expect("Could not embed image.")
                     } else {
                         pathdiff::diff_paths(&image_path, to_path.as_ref())
@@ -467,25 +467,38 @@ fn create_data_uri(data: &[u8], mime_type: &str) -> String {
 }
 
 fn image_to_buffer(image_path: impl AsRef<Path>) -> std::io::Result<String> {
+    println!("image_path: {}", image_path.as_ref().display());
     let file = std::fs::File::open(image_path.as_ref())?;
-    let reader = std::io::BufReader::new(file);
+    let mut reader = std::io::BufReader::new(file);
 
-    let ext = image_path
-        .as_ref()
-        .extension()
-        .expect("Could not get image extension.")
-        .to_str()
-        .expect("Could not get image extension as a string.");
-    let image_format = ImageFormat::from_extension(ext)
-        .unwrap_or_else(|| panic!("Image format not supported ({ext})"));
+    let ext = image_path.as_ref().extension().unwrap();
+    if !ext.eq_ignore_ascii_case("bmp") {
+        panic!("Invalid image format!");
+    }
 
-    let image = image::load(reader, image_format).expect("Could not read image file.");
+    let bmp_image =
+        shadow_company_tools::images::load_bmp_file(&mut reader).expect("Could not open .bmp file");
+
+    let raw_path = image_path.as_ref().with_extension("raw");
+    let png = if raw_path.exists() {
+        println!("raw_path: {}", raw_path.display());
+        let raw_image = shadow_company_tools::images::load_raw_file(
+            &mut std::fs::File::open(&raw_path).expect("Could not open .raw file."),
+            bmp_image.width(),
+            bmp_image.height(),
+        )
+        .expect("Could not read .raw file.");
+        shadow_company_tools::images::combine_bmp_and_raw(&bmp_image, &raw_image)
+    } else {
+        use image::buffer::ConvertBuffer;
+        let png: image::RgbaImage = bmp_image.convert();
+        png
+    };
 
     let mut buf = Vec::new();
     let mut writer = std::io::Cursor::new(&mut buf);
-    image
-        .write_to(&mut writer, ImageFormat::Png)
-        .expect("Could not convert image.");
+    png.write_to(&mut writer, ImageFormat::Png)
+        .expect("Could not generate image buffer.");
 
     Ok(create_data_uri(&buf, "image/png"))
 }
