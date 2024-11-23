@@ -91,39 +91,28 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
 
     for smf_node in scene.nodes.iter() {
         let mut node = json::Node {
-            translation: Some([
-                smf_node.position.x * opts.scale,
-                smf_node.position.z * opts.scale,
-                smf_node.position.y * opts.scale,
-            ]),
+            translation: Some((smf_node.position * opts.scale).to_array()),
             name: Some(smf_node.name.clone()),
             ..Default::default()
         };
 
         for smf_mesh in smf_node.meshes.iter() {
-            macro_rules! normalize {
-                ($v:expr) => {{
-                    if $v.is_nan() {
-                        0.0
-                    } else {
-                        $v
-                    }
-                }};
-            }
+            // macro_rules! normalize {
+            //     ($v:expr) => {{
+            //         if $v.is_nan() {
+            //             0.0
+            //         } else {
+            //             $v
+            //         }
+            //     }};
+            // }
             let smf_vertices = smf_mesh
                 .vertices
                 .iter()
                 .map(|v| VV {
-                    position: [
-                        v.position.x * opts.scale,
-                        v.position.z * opts.scale,
-                        v.position.y * opts.scale,
-                    ],
-                    _normal: [
-                        -normalize!(v.normal.x),
-                        -normalize!(v.normal.z),
-                        -normalize!(v.normal.y),
-                    ],
+                    position: (v.position * opts.scale).to_array(),
+                    // Normals are inverted for some reason?
+                    _normal: (-v.normal).to_array(),
                     _uv: [v.tex_coord.x, v.tex_coord.y, 0.0],
                 })
                 .collect::<Vec<_>>();
@@ -292,8 +281,8 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
 
                 let material_i = root.push(json::Material {
                     alpha_cutoff: None,
-                    alpha_mode: Valid(json::material::AlphaMode::Opaque),
-                    double_sided: false,
+                    alpha_mode: Valid(json::material::AlphaMode::Blend),
+                    double_sided: true,
                     name: None,
                     pbr_metallic_roughness: PbrMetallicRoughness {
                         base_color_factor: json::material::PbrBaseColorFactor([1.0, 1.0, 1.0, 1.0]),
