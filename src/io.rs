@@ -16,10 +16,10 @@ pub trait Reader: std::io::Read + std::io::Seek + Sized {
     }
 
     fn read_quat(&mut self) -> std::io::Result<Quat> {
-        let w = self.read_f32::<LE>()?;
         let x = self.read_f32::<LE>()?;
         let y = self.read_f32::<LE>()?;
         let z = self.read_f32::<LE>()?;
+        let w = self.read_f32::<LE>()?;
         Ok(Quat::from_xyzw(x, y, z, w))
     }
 
