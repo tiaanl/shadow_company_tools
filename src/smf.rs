@@ -3,15 +3,8 @@ use glam::{Quat, Vec2, Vec3};
 
 use crate::io::Reader;
 
-fn smf_version(s: &str) -> Option<u32> {
-    Some(match s {
-        s if s.starts_with("SMF V1.0") => 1,
-        s if s.starts_with("SMF V1.1") => 2,
-        _ => return None,
-    })
-}
-
-#[derive(Clone, Debug)]
+/// A container for an single model.
+#[derive(Debug)]
 pub struct Model {
     pub name: String,
     pub scale: Vec3,
@@ -48,7 +41,7 @@ impl Model {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Mesh {
     pub name: String,
     pub texture_name: String,
@@ -56,23 +49,23 @@ pub struct Mesh {
     pub faces: Vec<Face>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Face {
     pub index: u32,
     pub indices: [u32; 3],
 }
 
 impl Face {
-    fn read(c: &mut impl Reader) -> Self {
-        let index = c.read_u32::<LE>().unwrap();
-        let i0 = c.read_u32::<LE>().unwrap();
-        let i1 = c.read_u32::<LE>().unwrap();
-        let i2 = c.read_u32::<LE>().unwrap();
+    fn read(r: &mut impl Reader) -> std::io::Result<Self> {
+        let index = r.read_u32::<LE>()?;
+        let i0 = r.read_u32::<LE>()?;
+        let i1 = r.read_u32::<LE>()?;
+        let i2 = r.read_u32::<LE>()?;
 
-        Face {
+        Ok(Face {
             index,
             indices: [i0, i1, i2],
-        }
+        })
     }
 }
 
@@ -91,7 +84,7 @@ impl Mesh {
 
         let mut faces = Vec::with_capacity(face_count as usize);
         for _ in 0..face_count {
-            faces.push(Face::read(r));
+            faces.push(Face::read(r)?);
         }
 
         Ok(Mesh {
@@ -103,7 +96,7 @@ impl Mesh {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Vertex {
     pub index: u32,
     pub position: Vec3,
@@ -133,24 +126,24 @@ impl Vertex {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct CollisionBox {
+#[derive(Debug)]
+pub struct BoundingBox {
     pub max: Vec3,
     pub min: Vec3,
     pub u0: f32,
 }
 
-impl CollisionBox {
+impl BoundingBox {
     fn read(c: &mut impl Reader) -> std::io::Result<Self> {
         let max = c.read_vec3()?;
         let min = c.read_vec3()?;
         let u0 = c.read_f32::<LE>()?;
 
-        Ok(CollisionBox { max, min, u0 })
+        Ok(BoundingBox { max, min, u0 })
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Node {
     pub name: String,
     pub parent_name: String,
@@ -158,7 +151,7 @@ pub struct Node {
     pub position: Vec3,
     pub rotation: Quat,
     pub meshes: Vec<Mesh>,
-    pub collision_boxes: Vec<CollisionBox>,
+    pub bounding_boxes: Vec<BoundingBox>,
 }
 
 impl Node {
@@ -172,7 +165,7 @@ impl Node {
         let rotation = r.read_quat()?;
 
         let mesh_count = r.read_u32::<LE>()?;
-        let collision_box_count = r.read_u32::<LE>()?;
+        let bounding_box_count = r.read_u32::<LE>()?;
 
         if smf_version > 1 {
             let _ = r.read_u32::<LE>()?;
@@ -183,9 +176,9 @@ impl Node {
             meshes.push(Mesh::read(r)?);
         }
 
-        let mut collision_boxes = Vec::with_capacity(collision_box_count as usize);
-        for _ in 0..collision_box_count {
-            collision_boxes.push(CollisionBox::read(r)?);
+        let mut bounding_boxes = Vec::with_capacity(bounding_box_count as usize);
+        for _ in 0..bounding_box_count {
+            bounding_boxes.push(BoundingBox::read(r)?);
         }
 
         Ok(Node {
@@ -195,7 +188,15 @@ impl Node {
             position,
             rotation,
             meshes,
-            collision_boxes,
+            bounding_boxes,
         })
     }
+}
+
+fn smf_version(s: &str) -> Option<u32> {
+    Some(match s {
+        s if s.starts_with("SMF V1.0") => 1,
+        s if s.starts_with("SMF V1.1") => 2,
+        _ => return None,
+    })
 }

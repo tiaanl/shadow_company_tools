@@ -1,17 +1,6 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-
-use base64::Engine;
 use clap::Parser;
-use json::material::PbrMetallicRoughness;
-use shadow_company_tools::{bmf, smf};
-use std::collections::HashMap;
-use std::io::Cursor;
+use shadow_company_tools::smf;
 use std::path::PathBuf;
-
-use gltf_json as json;
-use json::validation::Checked::Valid;
-use json::validation::USize64;
 
 #[derive(Debug, Parser)]
 struct Opts {
@@ -22,61 +11,79 @@ struct Opts {
     print_mesh_details: bool,
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let opts = Opts::parse();
 
-    let mut c = Cursor::new(std::fs::read(opts.path).unwrap());
+    let files = if opts.path.is_dir() {
+        walkdir::WalkDir::new(opts.path)
+            .into_iter()
+            .filter_map(|entry| {
+                let Ok(entry) = entry else {
+                    return None;
+                };
 
-    let scene = smf::Model::read(&mut c).expect("Could not read SMF model file.");
+                if entry.path().extension()? != "smf" {
+                    return None;
+                }
 
-    println!("Model: {}, scale: {:?}", scene.name, scene.scale);
-    scene.nodes.iter().for_each(|node| {
-        println!(
-            "  Node({}): {} ({}), position: {}, rotation: {}",
-            if node.bone_index == 0xFFFFFFFF {
-                "?".to_string()
-            } else {
-                format!("{}", node.bone_index)
-            },
-            node.name,
-            node.parent_name,
-            node.position,
-            node.rotation
-        );
-        node.meshes.iter().for_each(|m| {
-            println!(
-                "    Mesh: {}, texture: {}, vertices: {}",
-                m.name,
-                m.texture_name,
-                m.vertices.len()
-            );
+                Some(entry.into_path())
+            })
+            .collect()
+    } else {
+        vec![opts.path]
+    };
 
-            if opts.print_mesh_details {
-                m.vertices.iter().enumerate().for_each(|(i, v)| {
+    for file in files {
+        let mut reader = std::fs::File::open(file)?;
+        let model = smf::Model::read(&mut reader)?;
+
+        println!("Model({}) | unknown: {:?}", model.name, model.scale);
+
+        fn print_nodes(nodes: &[smf::Node], parent_name: &str, indent: u32) {
+            for node in nodes.iter().filter(|node| node.parent_name == parent_name) {
+                for _ in 0..indent {
+                    print!("  ");
+                }
+                let bone_index = if node.bone_index == u32::MAX {
+                    String::from("n/a")
+                } else {
+                    format!("{}", node.bone_index)
+                };
+
+                println!(
+                    "Node({:}) bone: {}, position: {:?}, rotation: {:?}",
+                    node.name, bone_index, node.position, node.rotation,
+                );
+
+                for mesh in &node.meshes {
+                    for _ in 0..indent {
+                        print!("  ");
+                    }
                     println!(
-                        "      vertex {i}: {:9.3} {:9.3} {:9.3}",
-                        v.position.x, v.position.y, v.position.z,
+                        "..Mesh({}) texture: {}, vertices: {}, faces: {}",
+                        mesh.name,
+                        mesh.texture_name,
+                        mesh.vertices.len(),
+                        mesh.faces.len()
                     );
-                });
-                m.vertices.iter().enumerate().for_each(|(i, v)| {
+                }
+
+                for collision_box in &node.bounding_boxes {
+                    for _ in 0..indent {
+                        print!("  ");
+                    }
                     println!(
-                        "      normal {i}: {:9.3} {:9.3} {:9.3}",
-                        v.normal.x, v.normal.y, v.normal.z,
+                        "..CollisionBox min: {:?}, max: {:?}, unknown: {}",
+                        collision_box.min, collision_box.max, collision_box.u0
                     );
-                });
-                m.vertices.iter().enumerate().for_each(|(i, v)| {
-                    println!("      uv {i}: {:9.3} {:9.3}", v.tex_coord.x, v.tex_coord.y);
-                });
-                m.faces.iter().enumerate().for_each(|(i, f)| {
-                    println!(
-                        "      index {i}: {:5} {:5} {:5}",
-                        f.indices[0], f.indices[1], f.indices[2]
-                    );
-                });
+                }
+
+                print_nodes(nodes, &node.name, indent + 1);
             }
-        });
-        node.collision_boxes.iter().for_each(|c| {
-            println!("    Collision box: {} {} {}", c.max, c.min, c.u0);
-        });
-    });
+        }
+
+        print_nodes(&model.nodes, "<root>", 1);
+    }
+
+    Ok(())
 }

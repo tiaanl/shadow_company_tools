@@ -7,14 +7,14 @@ edition = "2021"
 configs = []
 
 [dependencies]
-bitflags = "2.5.0"
-byteorder = "1.5.0"
-glam = "0.27.0"
-image = { version = "0.25.5", default-features = false, features = [
+bitflags = "2.6"
+byteorder = "1.5"
+glam = "0.29"
+image = { version = "0.25", default-features = false, features = [
     "bmp",
     "jpeg",
 ] }
-thiserror = "1.0.59"
+thiserror = "2.0"
 
 [workspace]
 members = [
