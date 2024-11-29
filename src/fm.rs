@@ -121,7 +121,8 @@ impl FileManager {
         // println!("gut_path: {gut_path:?}");
 
         let mut file = std::fs::File::open(gut_path)?;
-        let header_size = file.skip_sinister_header()?;
+        file.skip_sinister_header()?;
+        let header_size = file.seek(std::io::SeekFrom::Current(0))?;
 
         let entries = crate::gut::read_gut_header(&mut file)?;
 
