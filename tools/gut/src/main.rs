@@ -69,45 +69,15 @@ fn extract(path: impl AsRef<Path>, out_dir: impl AsRef<Path>) {
         let entries = gut_file.read_entries();
 
         for entry in entries {
-            let full_path = out_dir.as_ref().join(&entry.name);
-            println!("  - {}", entry.name);
+            let entry_path = entry
+                .name
+                .split(r"\")
+                .collect::<Vec<_>>()
+                .join(std::path::MAIN_SEPARATOR_STR);
+            let full_path = out_dir.as_ref().join(&entry_path);
+            println!("  - {}", entry_path);
             std::fs::create_dir_all(full_path.parent().unwrap()).unwrap();
             std::fs::write(full_path, gut_file.get_contents(&entry)).unwrap();
         }
     }
 }
-
-// let extract_path = PathBuf::from("C:\\Games\\shadow_company\\extracted");
-
-// walkdir::WalkDir::new("C:\\Games\\shadow_company")
-//     .into_iter()
-//     .filter_map(|e| e.ok())
-//     .filter(|e| e.path().extension().unwrap_or_default() == "gut")
-//     .for_each(|e| {
-//         let prefix = e
-//             .path()
-//             .strip_prefix("C:\\Games\\shadow_company")
-//             .unwrap()
-//             .parent()
-//             .unwrap();
-
-//         let mut gut_file = GutFile::load(e.path()).unwrap();
-//         let entries = gut_file.read_entries();
-
-//         // println!("[{}]", gut_file.path.display());
-//         for entry in entries {
-//             // println!("{}: {} ({} bytes)", entry.name, entry.offset, entry.size);
-
-//             /*
-//             let c = gut_file.get_contents(&entry);
-//             for ch in c.iter() {
-//                 print!("{}", *ch as char);
-//             }
-//             println!();
-//             */
-//             let full_path = extract_path.join(prefix).join(&entry.name);
-//             println!("{}: full_path: {}", entry.is_encrypted, full_path.display());
-//             std::fs::create_dir_all(full_path.parent().unwrap()).unwrap();
-//             std::fs::write(full_path, gut_file.get_contents(&entry)).unwrap();
-//         }
-//     });

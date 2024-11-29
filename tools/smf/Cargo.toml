@@ -7,5 +7,4 @@ edition = "2021"
 base64 = "0.22"
 byteorder = "1.5.0"
 clap = { version = "4.5.1", features = ["derive"] }
-gltf-json = { path = "../../../gltf/gltf-json", features = ["extras", "names"] }
 shadow_company_tools = { path = "../.." }
