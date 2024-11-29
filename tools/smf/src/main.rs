@@ -34,8 +34,15 @@ fn main() -> std::io::Result<()> {
     };
 
     for file in files {
-        let mut reader = std::fs::File::open(file)?;
-        let model = smf::Model::read(&mut reader)?;
+        let mut reader = std::fs::File::open(&file)?;
+
+        let model = match smf::Model::read(&mut reader) {
+            Ok(model) => model,
+            Err(err) => {
+                eprintln!("Could not read model: {}", file.display());
+                return Err(err);
+            }
+        };
 
         println!("Model({}) | unknown: {:?}", model.name, model.scale);
 
@@ -44,15 +51,15 @@ fn main() -> std::io::Result<()> {
                 for _ in 0..indent {
                     print!("  ");
                 }
-                let bone_index = if node.bone_index == u32::MAX {
+                let tree_id = if node.tree_id == u32::MAX {
                     String::from("n/a")
                 } else {
-                    format!("{}", node.bone_index)
+                    format!("{}", node.tree_id)
                 };
 
                 println!(
-                    "Node({:}) bone: {}, position: {:?}, rotation: {:?}",
-                    node.name, bone_index, node.position, node.rotation,
+                    "Node({:}) parent: {}, tree_id: {}, position: {:?}, rotation: {:?}",
+                    node.name, node.parent_name, tree_id, node.position, node.rotation,
                 );
 
                 for mesh in &node.meshes {
@@ -66,15 +73,36 @@ fn main() -> std::io::Result<()> {
                         mesh.vertices.len(),
                         mesh.faces.len()
                     );
+
+                    /*
+                    for vertex in &mesh.vertices {
+                        for _ in 0..indent + 1 {
+                            print!("  ");
+                        }
+                        println!(
+                            "{}: ({}, {}, {}) ",
+                            vertex.index, vertex.position.x, vertex.position.y, vertex.position.z
+                        );
+                    }
+                    for face in &mesh.faces {
+                        for _ in 0..indent + 1 {
+                            print!("  ");
+                        }
+                        println!(
+                            "{}: {}, {}, {} ",
+                            face.index, face.indices[0], face.indices[1], face.indices[2],
+                        );
+                    }
+                    */
                 }
 
-                for collision_box in &node.bounding_boxes {
+                for bounding_box in &node.bounding_boxes {
                     for _ in 0..indent {
                         print!("  ");
                     }
                     println!(
                         "..CollisionBox min: {:?}, max: {:?}, unknown: {}",
-                        collision_box.min, collision_box.max, collision_box.u0
+                        bounding_box.min, bounding_box.max, bounding_box.u0
                     );
                 }
 

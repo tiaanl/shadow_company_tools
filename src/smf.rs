@@ -13,10 +13,11 @@ pub struct Model {
 
 impl Model {
     pub fn read(r: &mut impl Reader) -> std::io::Result<Self> {
-        let _ = r.skip_sinister_header()?;
+        const MARKER: &[u8] = &[0x1A, 0xFA, 0x31, 0xC1, 0xDE, 0xED, 0x42, 0x14];
+        let _ = r.skip_sinister_header_2(MARKER, 0x400)?;
 
-        let version_string = r.read_fixed_string(16)?;
-        let Some(smf_version) = smf_version(&version_string) else {
+        let smf_version = smf_version(&r.read_fixed_string(16)?);
+        if smf_version == 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "Invalid SMF version.",
@@ -147,7 +148,7 @@ impl BoundingBox {
 pub struct Node {
     pub name: String,
     pub parent_name: String,
-    pub bone_index: u32,
+    pub tree_id: u32,
     pub position: Vec3,
     pub rotation: Quat,
     pub meshes: Vec<Mesh>,
@@ -184,7 +185,7 @@ impl Node {
         Ok(Node {
             name,
             parent_name,
-            bone_index,
+            tree_id: bone_index,
             position,
             rotation,
             meshes,
@@ -193,10 +194,10 @@ impl Node {
     }
 }
 
-fn smf_version(s: &str) -> Option<u32> {
-    Some(match s {
+fn smf_version(s: &str) -> u32 {
+    match s {
         s if s.starts_with("SMF V1.0") => 1,
         s if s.starts_with("SMF V1.1") => 2,
-        _ => return None,
-    })
+        _ => 0,
+    }
 }
