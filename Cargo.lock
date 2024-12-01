@@ -1134,8 +1134,6 @@ checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 name = "smf"
 version = "0.1.0"
 dependencies = [
- "base64",
- "byteorder",
  "clap",
  "shadow_company_tools",
  "walkdir",
