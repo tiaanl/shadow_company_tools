@@ -34,10 +34,12 @@ fn main() {
 }
 
 fn list(path: impl AsRef<Path>) {
-    let gut_file = GutFile::load(path.as_ref()).unwrap();
-    let mut entries = gut_file.read_entries();
-    entries.sort_by(|a, b| a.size.cmp(&b.size));
-    for entry in entries {
+    let mut file = std::fs::File::open(path.as_ref()).unwrap();
+    let gut_file = GutFile::open(&mut file).unwrap();
+
+    println!("gut_file: {:?}", gut_file);
+
+    for entry in gut_file.entries() {
         println!(
             "{} ({} bytes{})",
             entry.name,
@@ -65,10 +67,10 @@ fn extract(path: impl AsRef<Path>, out_dir: impl AsRef<Path>) {
 
     for gut_file_path in gut_file_paths {
         println!("Extracting contents of {}", gut_file_path.display());
-        let mut gut_file = GutFile::load(gut_file_path).unwrap();
-        let entries = gut_file.read_entries();
+        let mut file = std::fs::File::open(gut_file_path).unwrap();
+        let mut gut_file = GutFile::open(&mut file).unwrap();
 
-        for entry in entries {
+        for entry in gut_file.entries() {
             let entry_path = entry
                 .name
                 .split(r"\")
@@ -76,8 +78,8 @@ fn extract(path: impl AsRef<Path>, out_dir: impl AsRef<Path>) {
                 .join(std::path::MAIN_SEPARATOR_STR);
             let full_path = out_dir.as_ref().join(&entry_path);
             println!("  - {}", entry_path);
-            std::fs::create_dir_all(full_path.parent().unwrap()).unwrap();
-            std::fs::write(full_path, gut_file.get_contents(&entry)).unwrap();
+            // std::fs::create_dir_all(full_path.parent().unwrap()).unwrap();
+            // std::fs::write(full_path, gut_file.get_contents(&entry)).unwrap();
         }
     }
 }

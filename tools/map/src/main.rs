@@ -1,9 +1,9 @@
-use shadow_company_tools::{fm::FileManager, map::Map};
+use shadow_company_tools::{data_dir::DataDir, map::Map};
 
 fn main() {
-    let fm = FileManager::new("C:\\Games\\shadow_company\\data");
+    let fm = DataDir::new("C:\\Games\\shadow_company\\data");
 
-    let mut file = match fm.open_file("maps\\training_final.mtf") {
+    let mut file = match fm.open("maps\\training_final.mtf") {
         Ok(file) => file,
         Err(e) => {
             eprintln!("Could not open file ({:?})", e);

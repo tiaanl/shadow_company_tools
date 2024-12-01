@@ -13,8 +13,8 @@ pub struct Model {
 
 impl Model {
     pub fn read(r: &mut impl Reader) -> std::io::Result<Self> {
-        const MARKER: &[u8] = &[0x1A, 0xFA, 0x31, 0xC1, 0xDE, 0xED, 0x42, 0x14];
-        let _ = r.skip_sinister_header_2(MARKER, 0x400)?;
+        const MAGIC: &[u32; 2] = &[0xC131FA1A, 0x1442EDDE];
+        let _ = r.skip_sinister_header_2(MAGIC, 0x4000)?;
 
         let smf_version = smf_version(&r.read_fixed_string(16)?);
         if smf_version == 0 {

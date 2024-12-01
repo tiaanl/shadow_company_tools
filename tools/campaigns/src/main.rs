@@ -1,5 +1,8 @@
 use clap::Parser;
-use shadow_company_tools::config::{Config, ConfigReader};
+use shadow_company_tools::{
+    config::{Config, ConfigReader},
+    data_dir::DataDir,
+};
 use shadow_company_tools_configs::CampaignDefs;
 use std::path::PathBuf;
 
@@ -12,12 +15,12 @@ struct Opts {
 fn main() {
     let opts = Opts::parse();
 
-    let fm = shadow_company_tools::fm::FileManager::new(opts.data_dir);
+    let fm = DataDir::new(opts.data_dir);
 
-    let file = match fm.open_file("config\\campaign_defs.txt") {
+    let file = match fm.open("config/campaign_defs.txt") {
         Ok(file) => file,
         Err(e) => {
-            eprintln!("Error: {:?}", e);
+            eprintln!("Error: {}", e);
             return;
         }
     };

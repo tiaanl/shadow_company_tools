@@ -12,9 +12,9 @@ struct Opts {
 }
 
 fn main() {
-    let fm = shadow_company_tools::fm::FileManager::new("C:\\Games\\shadow_company\\Data");
+    let fm = shadow_company_tools::data_dir::DataDir::new("C:\\Games\\shadow_company\\Data");
 
-    let file = match fm.open_file("config\\image_defs.txt") {
+    let file = match fm.open("config\\image_defs.txt") {
         Ok(file) => file,
         Err(e) => {
             eprintln!("Error: {:?}", e);

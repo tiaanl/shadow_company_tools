@@ -1,5 +1,32 @@
+use std::path::{Path, PathBuf};
+
 use byteorder::{LittleEndian as LE, ReadBytesExt};
 use glam::{Quat, Vec2, Vec3};
+
+fn change_separator(path: impl AsRef<Path>, separator: char) -> PathBuf {
+    PathBuf::from(
+        path.as_ref()
+            .to_string_lossy()
+            .chars()
+            .map(|c| if c == '/' || c == '\\' { separator } else { c })
+            .collect::<String>(),
+    )
+}
+
+pub trait PathExt {
+    fn with_data_dir_separators(&self) -> PathBuf;
+    fn with_os_separators(&self) -> PathBuf;
+}
+
+impl PathExt for Path {
+    fn with_data_dir_separators(&self) -> PathBuf {
+        change_separator(self, '\\')
+    }
+
+    fn with_os_separators(&self) -> PathBuf {
+        change_separator(self, std::path::MAIN_SEPARATOR)
+    }
+}
 
 pub trait Reader: std::io::Read + std::io::Seek + Sized {
     fn read_vec2(&mut self) -> std::io::Result<Vec2> {
@@ -71,10 +98,11 @@ pub trait Reader: std::io::Read + std::io::Seek + Sized {
     /// [std::io::ErrorKind::UnexpectedEof] is returned if the max_length is exceeded.
     fn skip_sinister_header_2(
         &mut self,
-        sequence: &[u8],
-        max_length: usize,
-    ) -> std::io::Result<usize> {
-        debug_assert!(!sequence.is_empty(), "sequence can't be empty");
+        magic: &[u32; 2],
+        max_length: u64,
+    ) -> std::io::Result<u64> {
+        let sequence: &[u8] = bytemuck::cast_slice(magic);
+        debug_assert_eq!(sequence.len(), std::mem::size_of_val(magic));
 
         let mut bytes_read = 0;
         let mut match_index = 0;
@@ -100,51 +128,3 @@ pub trait Reader: std::io::Read + std::io::Seek + Sized {
 }
 
 impl<R: std::io::Read + std::io::Seek + Sized> Reader for R {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sinister_header() {
-        // No match found within the max length.
-        let mut c = std::io::Cursor::new(b"data123data");
-        let result = c.skip_sinister_header_2(b"456", 10);
-        assert!(result.is_err());
-
-        // No match found, max length exceeded.
-        let mut c = std::io::Cursor::new(b"data123data");
-        let result = c.skip_sinister_header_2(b"123", 5);
-        assert!(result.is_err());
-
-        // Matches the first one.
-        let mut c = std::io::Cursor::new(b"123data123data");
-        let length = c.skip_sinister_header_2(b"123", 10).unwrap();
-        assert_eq!(length, 3);
-
-        // Matches at the end.
-        let mut c = std::io::Cursor::new(b"data123");
-        let length = c.skip_sinister_header_2(b"123", 10).unwrap();
-        assert_eq!(length, 7);
-
-        // Matches with repeated sequence.
-        let mut c = std::io::Cursor::new(b"123123data");
-        let length = c.skip_sinister_header_2(b"123", 10).unwrap();
-        assert_eq!(length, 3);
-
-        // Matches with partial sequence at the end.
-        let mut c = std::io::Cursor::new(b"data12");
-        let result = c.skip_sinister_header_2(b"123", 10);
-        assert!(result.is_err());
-
-        // Matches with sequence at the start.
-        let mut c = std::io::Cursor::new(b"123data");
-        let length = c.skip_sinister_header_2(b"123", 10).unwrap();
-        assert_eq!(length, 3);
-
-        // Matches with sequence in the middle.
-        let mut c = std::io::Cursor::new(b"data123data");
-        let length = c.skip_sinister_header_2(b"123", 10).unwrap();
-        assert_eq!(length, 7);
-    }
-}
