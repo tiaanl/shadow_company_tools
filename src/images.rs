@@ -24,8 +24,9 @@ where
         .expect("Not enought bytes from reader. Are the width or height invalid?"))
 }
 
-/// Load a .bmp file from the reader and returns it as a RGB image.
-pub fn load_bmp_file<R>(reader: &mut R) -> ImageResult<RgbImage>
+/// Load a .bmp file from the reader and returns it as a RGB image.  If `color_keyd` is specified,
+/// then all black pixels are turned to alpha 0.
+pub fn load_bmp_file<R>(reader: &mut R, color_keyd: bool) -> ImageResult<RgbaImage>
 where
     R: Reader,
 {
@@ -36,12 +37,28 @@ where
     let (width, height) = decoder.dimensions();
     decoder.read_image(&mut buf)?;
 
-    Ok(RgbImage::from_vec(width, height, buf).unwrap())
+    let mut rgba = Vec::with_capacity(buf.len() / 3 * 4);
+    if color_keyd {
+        for chunk in buf.chunks_exact(3) {
+            let alpha = if chunk[0] == 0 && chunk[1] == 0 && chunk[2] == 0 {
+                0
+            } else {
+                255
+            };
+            rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], alpha]);
+        }
+    } else {
+        for chunk in buf.chunks_exact(3) {
+            rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+        }
+    }
+
+    Ok(RgbaImage::from_raw(width, height, rgba).expect("Failed to create RGBA image"))
 }
 
 /// Combine an RGB image (from load_bmp_file) with a grayscale image (from
 /// load_raw_file) to create an RGBA image, using the grayscale image as the alpha channel.
-pub fn combine_bmp_and_raw(bmp: &RgbImage, raw: &GrayImage) -> RgbaImage {
+pub fn combine_bmp_and_raw(bmp: &RgbaImage, raw: &GrayImage) -> RgbaImage {
     use image::buffer::ConvertBuffer;
 
     let mut rgba: RgbaImage = bmp.convert();
