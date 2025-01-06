@@ -7,7 +7,7 @@ struct Opts {
     /// Path to the .smf file you want to operate on.
     path: PathBuf,
     /// Print out mesh vertices, index and faces.
-    #[arg(long)]
+    #[arg(long, short)]
     print_mesh_details: bool,
 }
 
@@ -44,73 +44,96 @@ fn main() -> std::io::Result<()> {
             }
         };
 
-        println!("Model({}) | unknown: {:?}", model.name, model.scale);
+        let mut tree = ptree::TreeBuilder::new(file.display().to_string());
 
-        fn print_nodes(nodes: &[smf::Node], parent_name: &str, indent: u32) {
+        tree.begin_child(format!(
+            "Model({}) | unknown: {:?}",
+            model.name, model.scale
+        ));
+
+        fn print_nodes(
+            nodes: &[smf::Node],
+            parent_name: &str,
+            tree: &mut ptree::TreeBuilder,
+            print_mesh_details: bool,
+        ) {
             for node in nodes.iter().filter(|node| node.parent_name == parent_name) {
-                for _ in 0..indent {
-                    print!("  ");
-                }
                 let tree_id = if node.tree_id == u32::MAX {
                     String::from("n/a")
                 } else {
                     format!("{}", node.tree_id)
                 };
 
-                println!(
-                    "Node({:}) parent: {}, tree_id: {}, position: {:?}, rotation: {:?}",
-                    node.name, node.parent_name, tree_id, node.position, node.rotation,
-                );
+                tree.begin_child(format!(
+                    "Node({:}) tree_id: {}, position: {:?}, rotation: {:?}",
+                    node.name, tree_id, node.position, node.rotation,
+                ));
 
-                for mesh in &node.meshes {
-                    for _ in 0..indent {
-                        print!("  ");
-                    }
-                    println!(
-                        "..Mesh({}) texture: {}, vertices: {}, faces: {}",
-                        mesh.name,
-                        mesh.texture_name,
-                        mesh.vertices.len(),
-                        mesh.faces.len()
-                    );
+                if !node.meshes.is_empty() {
+                    tree.begin_child("Meshes".to_string());
+                    for mesh in &node.meshes {
+                        tree.begin_child(format!(
+                            "Mesh({}) texture: {}, vertices: {}, faces: {}",
+                            mesh.name,
+                            mesh.texture_name,
+                            mesh.vertices.len(),
+                            mesh.faces.len()
+                        ));
 
-                    /*
-                    for vertex in &mesh.vertices {
-                        for _ in 0..indent + 1 {
-                            print!("  ");
+                        if print_mesh_details {
+                            if !mesh.vertices.is_empty() {
+                                tree.begin_child("Vertices".to_string());
+                                for vertex in &mesh.vertices {
+                                    tree.add_empty_child(format!(
+                                        "{:4}: ({:9.2}, {:9.2}, {:9.2})",
+                                        vertex.index,
+                                        vertex.position.x,
+                                        vertex.position.y,
+                                        vertex.position.z,
+                                    ));
+                                }
+                                tree.end_child();
+                            }
+                            if !mesh.faces.is_empty() {
+                                tree.begin_child("Faces".to_string());
+                                for face in &mesh.faces {
+                                    tree.add_empty_child(format!(
+                                        "{:4}: {:3}, {:3}, {:3} ",
+                                        face.index,
+                                        face.indices[0],
+                                        face.indices[1],
+                                        face.indices[2],
+                                    ));
+                                }
+                                tree.end_child();
+                            }
                         }
-                        println!(
-                            "{}: ({}, {}, {}) ",
-                            vertex.index, vertex.position.x, vertex.position.y, vertex.position.z
-                        );
-                    }
-                    for face in &mesh.faces {
-                        for _ in 0..indent + 1 {
-                            print!("  ");
+
+                        if print_mesh_details && !node.bounding_boxes.is_empty() {
+                            tree.begin_child("Bounding Boxes".to_string());
+                            for bounding_box in &node.bounding_boxes {
+                                tree.add_empty_child(format!(
+                                    "CollisionBox min: {:?}, max: {:?}, unknown: {}",
+                                    bounding_box.min, bounding_box.max, bounding_box.u0
+                                ));
+                            }
+                            tree.end_child();
                         }
-                        println!(
-                            "{}: {}, {}, {} ",
-                            face.index, face.indices[0], face.indices[1], face.indices[2],
-                        );
                     }
-                    */
+                    tree.end_child();
                 }
 
-                for bounding_box in &node.bounding_boxes {
-                    for _ in 0..indent {
-                        print!("  ");
-                    }
-                    println!(
-                        "..CollisionBox min: {:?}, max: {:?}, unknown: {}",
-                        bounding_box.min, bounding_box.max, bounding_box.u0
-                    );
-                }
+                tree.end_child();
 
-                print_nodes(nodes, &node.name, indent + 1);
+                print_nodes(nodes, &node.name, tree, print_mesh_details);
             }
         }
 
-        print_nodes(&model.nodes, "<root>", 1);
+        print_nodes(&model.nodes, "<root>", &mut tree, opts.print_mesh_details);
+
+        tree.end_child();
+
+        ptree::print_tree(&tree.build()).unwrap();
     }
 
     Ok(())

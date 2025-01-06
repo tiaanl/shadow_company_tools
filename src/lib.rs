@@ -4,7 +4,7 @@ pub mod config;
 pub mod data_dir;
 pub mod gut;
 pub mod images;
-mod io;
+pub mod io;
 pub mod map;
 pub mod smf;
 

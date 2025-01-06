@@ -5,7 +5,7 @@
 //! .bmp files are for RGB images.
 //! .pcx files are used for data, such as height maps, a-star map data, etc.
 
-use image::{GrayImage, ImageDecoder, ImageResult, RgbImage, RgbaImage};
+use image::{GrayImage, ImageDecoder, ImageResult, RgbaImage};
 
 use crate::io::Reader;
 
