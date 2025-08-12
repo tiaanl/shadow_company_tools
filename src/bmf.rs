@@ -6,7 +6,7 @@ use crate::io;
 
 #[derive(Clone, Debug)]
 pub struct Bone {
-    pub bone_index: u32,
+    pub bone_id: u32,
     pub time: u32,
     pub rotation: Option<Quat>,
     pub position: Option<Vec3>,
@@ -14,7 +14,7 @@ pub struct Bone {
 
 #[derive(Debug)]
 pub struct KeyFrame {
-    pub time: u32,
+    pub frame: u32,
     pub bones: Vec<Bone>,
 }
 
@@ -22,7 +22,7 @@ pub struct KeyFrame {
 pub struct Motion {
     pub name: String,
     pub key_frames: Vec<KeyFrame>,
-    pub bone_indices: Vec<u32>,
+    pub bone_ids: Vec<u32>,
 }
 
 bitflags! {
@@ -93,13 +93,13 @@ impl Motion {
 
                 bones.push(Bone {
                     time: bone_time,
-                    bone_index,
+                    bone_id: bone_index,
                     rotation,
                     position,
                 });
             }
 
-            key_frames.push(KeyFrame { time, bones });
+            key_frames.push(KeyFrame { frame: time, bones });
         }
 
         let mut bone_indices = vec![];
@@ -112,7 +112,7 @@ impl Motion {
         Ok(Self {
             name,
             key_frames,
-            bone_indices,
+            bone_ids: bone_indices,
         })
     }
 }

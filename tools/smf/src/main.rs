@@ -85,11 +85,16 @@ fn main() -> std::io::Result<()> {
                                 tree.begin_child("Vertices".to_string());
                                 for vertex in &mesh.vertices {
                                     tree.add_empty_child(format!(
-                                        "{:4}: ({:9.2}, {:9.2}, {:9.2})",
+                                        "{:4}: ({:9.2}, {:9.2}, {:9.2}) ({:9.2}, {:9.2}) ({:9.2}, {:9.2}, {:9.2})",
                                         vertex.index,
                                         vertex.position.x,
                                         vertex.position.y,
                                         vertex.position.z,
+                                        vertex.tex_coord.x,
+                                        vertex.tex_coord.y,
+                                        vertex.normal.x,
+                                        vertex.normal.y,
+                                        vertex.normal.z,
                                     ));
                                 }
                                 tree.end_child();
@@ -109,23 +114,25 @@ fn main() -> std::io::Result<()> {
                             }
                         }
 
-                        if print_mesh_details && !node.bounding_boxes.is_empty() {
-                            tree.begin_child("Bounding Boxes".to_string());
-                            for bounding_box in &node.bounding_boxes {
-                                tree.add_empty_child(format!(
-                                    "CollisionBox min: {:?}, max: {:?}, unknown: {}",
-                                    bounding_box.min, bounding_box.max, bounding_box.u0
-                                ));
-                            }
-                            tree.end_child();
-                        }
+                        tree.end_child();
                     }
                     tree.end_child();
+
+                    if print_mesh_details && !node.bounding_boxes.is_empty() {
+                        tree.begin_child("Bounding Boxes".to_string());
+                        for bounding_box in &node.bounding_boxes {
+                            tree.add_empty_child(format!(
+                                "CollisionBox min: {:?}, max: {:?}, unknown: {}",
+                                bounding_box.min, bounding_box.max, bounding_box.u0
+                            ));
+                        }
+                        tree.end_child();
+                    }
                 }
 
-                tree.end_child();
-
                 print_nodes(nodes, &node.name, tree, print_mesh_details);
+
+                tree.end_child();
             }
         }
 

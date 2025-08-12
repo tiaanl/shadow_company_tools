@@ -15,7 +15,7 @@ enum ConfigType<'a> {
     Vec(Box<ConfigType<'a>>),
 }
 
-impl<'a> ConfigType<'a> {
+impl ConfigType<'_> {
     fn quote(&self, field_name: &syn::Ident, end_type: &EndType) -> proc_macro2::TokenStream {
         match self {
             ConfigType::String | ConfigType::U32 | ConfigType::I32 | ConfigType::F32 => {

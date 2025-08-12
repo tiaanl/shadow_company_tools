@@ -8,4 +8,4 @@ pub mod io;
 pub mod map;
 pub mod smf;
 
-pub use glam::{Quat, Vec2, Vec3};
+pub use glam::{Mat4, Quat, Vec2, Vec3, Vec4};

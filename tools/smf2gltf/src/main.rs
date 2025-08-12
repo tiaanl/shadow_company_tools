@@ -1,11 +1,14 @@
 use clap::Parser;
-use gltf_json as json;
+use gltf_json::{self as json, scene::UnitQuaternion};
 use image::ImageFormat;
 use json::{
     material::PbrMetallicRoughness,
     validation::{Checked::Valid, USize64},
 };
-use shadow_company_tools::smf;
+use shadow_company_tools::{
+    smf::{self, CONVERT, CONVERT_NORMAL},
+    Mat4, Quat, Vec3,
+};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -89,30 +92,37 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
 
     let mut material_indices = HashMap::new();
 
+    let convert_position = |v: Vec3| {
+        let m = CONVERT * Mat4::from_scale(Vec3::splat(opts.scale));
+        m.project_point3(v)
+    };
+
+    let convert_rotation = |q: Quat| {
+        let rotation_z_to_y = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+        let transformed_quaternion = rotation_z_to_y * q;
+        Quat::from_xyzw(
+            -transformed_quaternion.x,
+            transformed_quaternion.y,
+            transformed_quaternion.z,
+            transformed_quaternion.w,
+        )
+    };
+
     for smf_node in scene.nodes.iter() {
         let mut node = json::Node {
-            translation: Some((smf_node.position * opts.scale).to_array()),
+            translation: Some(convert_position(smf_node.position).to_array()),
             name: Some(smf_node.name.clone()),
             ..Default::default()
         };
 
         for smf_mesh in smf_node.meshes.iter() {
-            // macro_rules! normalize {
-            //     ($v:expr) => {{
-            //         if $v.is_nan() {
-            //             0.0
-            //         } else {
-            //             $v
-            //         }
-            //     }};
-            // }
             let smf_vertices = smf_mesh
                 .vertices
                 .iter()
                 .map(|v| VV {
-                    position: (v.position * opts.scale).to_array(),
+                    position: convert_position(v.position).to_array(),
                     // Normals are inverted for some reason?
-                    _normal: (-v.normal).to_array(),
+                    _normal: CONVERT_NORMAL.project_point3(-v.normal).to_array(),
                     _uv: [v.tex_coord.x, v.tex_coord.y, 0.0],
                 })
                 .collect::<Vec<_>>();
@@ -281,7 +291,7 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
 
                 let material_i = root.push(json::Material {
                     alpha_cutoff: None,
-                    alpha_mode: Valid(json::material::AlphaMode::Blend),
+                    alpha_mode: Valid(json::material::AlphaMode::Opaque),
                     double_sided: true,
                     name: None,
                     pbr_metallic_roughness: PbrMetallicRoughness {
@@ -465,8 +475,9 @@ fn image_to_buffer(image_path: impl AsRef<Path>) -> std::io::Result<String> {
         panic!("Invalid image format!");
     }
 
-    let bmp_image =
-        shadow_company_tools::images::load_bmp_file(&mut reader).expect("Could not open .bmp file");
+    // TODO: Check if the image is color keyed.
+    let bmp_image = shadow_company_tools::images::load_bmp_file(&mut reader, false)
+        .expect("Could not open .bmp file");
 
     let raw_path = image_path.as_ref().with_extension("raw");
     let png = if raw_path.exists() {

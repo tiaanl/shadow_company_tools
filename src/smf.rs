@@ -1,7 +1,25 @@
 use byteorder::{LittleEndian as LE, ReadBytesExt};
-use glam::{Quat, Vec2, Vec3};
+use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 
 use crate::io::Reader;
+
+/// This matrix converts from the left handed z-up coordinate system used by SC to the system used
+/// by gltf files which is right handed and y-up.
+pub const CONVERT: Mat4 = Mat4::from_cols(
+    Vec4::new(-1.0, 0.0, 0.0, 0.0),
+    Vec4::new(0.0, 0.0, -1.0, 0.0),
+    Vec4::new(0.0, 1.0, 0.0, 0.0),
+    Vec4::new(0.0, 0.0, 0.0, 1.0),
+);
+
+/// Similar to the [CONVERT] matrix above, but for converting normals. Calculated from:
+/// `CONVERT.invert().transpose()`.
+pub const CONVERT_NORMAL: Mat4 = Mat4::from_cols(
+    Vec4::new(-1.0, 0.0, 0.0, 0.0),
+    Vec4::new(0.0, 0.0, -1.0, 0.0),
+    Vec4::new(0.0, 1.0, 0.0, 0.0),
+    Vec4::new(0.0, 0.0, 0.0, 1.0),
+);
 
 /// A container for an single model.
 #[derive(Debug)]
@@ -111,8 +129,11 @@ impl Vertex {
 
         let position = r.read_vec3()?;
 
-        let _ = r.read_i32::<LE>()?; // usually == -1
-        let _ = r.read_i32::<LE>()?; // usually == 0.0
+        let u1 = r.read_i32::<LE>()?; // usually == -1
+        let u2 = r.read_f32::<LE>()?; // usually == 0.0
+
+        assert!(u1 == -1);
+        assert!(u2 == 0.0);
 
         let tex_coord = r.read_vec2()?;
 

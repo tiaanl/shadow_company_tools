@@ -51,7 +51,10 @@ fn convert_to_png(opts: &Opts) -> ImageResult<RgbaImage> {
     let bmp_image = if bmp_path.exists() {
         println!("BMP file: {}", bmp_path.display());
         let mut bmp_file = std::fs::File::open(&bmp_path)?;
-        Some(shadow_company_tools::images::load_bmp_file(&mut bmp_file)?)
+        Some(shadow_company_tools::images::load_bmp_file(
+            &mut bmp_file,
+            false,
+        )?)
     } else {
         None
     };
