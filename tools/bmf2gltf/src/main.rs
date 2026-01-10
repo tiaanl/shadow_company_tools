@@ -1,6 +1,5 @@
-use core::f32;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     path::PathBuf,
 };
 
@@ -9,12 +8,11 @@ use clap::Parser;
 use gltf_json::{
     accessor::{self, ComponentType, GenericComponentType},
     animation::{Channel, Interpolation, Property, Sampler, Target},
-    buffer::{Stride, View},
-    mesh::{Primitive, Semantic},
+    buffer::View,
     validation::{Checked, USize64},
-    Accessor, Animation, Buffer, Index, Mesh, Node, Root, Scene,
+    Accessor, Animation, Buffer, Index, Node, Root, Scene,
 };
-use shadow_company_tools::{bmf, smf, Quat, Vec3, Vec4};
+use shadow_company_tools::{bmf, smf, Quat, Vec3};
 
 #[derive(Parser)]
 struct Opts {
@@ -22,6 +20,9 @@ struct Opts {
     smf_path: PathBuf,
     /// Motion file.
     bmf_path: PathBuf,
+    /// Frames per second for keyframe times (bmf times are frame numbers).
+    #[arg(long, default_value_t = 30.0)]
+    fps: f32,
 }
 
 #[derive(Clone, Copy, NoUninit)]
@@ -29,21 +30,6 @@ struct Opts {
 struct Vertex {
     position: Vec3,
     normal: Vec3,
-}
-
-#[derive(Clone, Copy, Debug, NoUninit)]
-#[repr(C)]
-struct TimedTranslation {
-    time: u32,
-    translation: Vec3,
-}
-
-#[derive(Clone, Copy, Debug, NoUninit)]
-#[repr(C)]
-struct TimedRotation {
-    time: u32,
-    _padding: [f32; 3],
-    rotation: Quat,
 }
 
 impl From<(Vec3, Vec3)> for Vertex {
@@ -73,9 +59,16 @@ fn main() {
     let mut root = Root::default();
 
     assert_eq!(smf.nodes[0].parent_name, "<root>");
-    add_node(&mut root, smf.nodes.as_slice(), 0, &mut bone_lookup);
+    let root_index = add_node(&mut root, smf.nodes.as_slice(), 0, &mut bone_lookup);
 
-    add_animation(&mut root, &bmf, &bone_lookup);
+    add_animation(&mut root, &bmf, &bone_lookup, opts.fps);
+
+    root.push(Scene {
+        extensions: None,
+        extras: None,
+        name: Some(smf.name.clone()),
+        nodes: vec![root_index],
+    });
 
     let str = gltf_json::serialize::to_string_pretty(&root).unwrap();
     println!("{}", str);
@@ -119,7 +112,12 @@ fn add_node(
     index
 }
 
-fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u32, Index<Node>>) {
+fn add_animation(
+    root: &mut Root,
+    motion: &bmf::Motion,
+    bone_lookup: &HashMap<u32, Index<Node>>,
+    fps: f32,
+) {
     let mut animation = Animation {
         extensions: None,
         extras: None,
@@ -128,22 +126,28 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
         samplers: vec![],
     };
 
-    let mut translations = HashMap::<u32, Vec<TimedTranslation>>::new();
-    let mut rotations = HashMap::<u32, Vec<TimedRotation>>::new();
+    let mut translations = HashMap::<u32, (Vec<f32>, Vec<[f32; 3]>)>::new();
+    let mut rotations = HashMap::<u32, (Vec<f32>, Vec<[f32; 4]>)>::new();
+
+    let fps = if fps > 0.0 { fps } else { 30.0 };
+    let frame_to_seconds = |frame: u32| frame as f32 / fps;
 
     for key_frame in motion.key_frames.iter() {
         for bone in key_frame.bones.iter() {
+            let bone_id = motion
+                .bone_ids
+                .get(bone.bone_id as usize)
+                .copied()
+                .unwrap_or(bone.bone_id);
+            let time = frame_to_seconds(bone.time);
             if let Some(translation) = bone.position {
-                let translations = translations.entry(bone.bone_index).or_default();
-                translations.push(TimedTranslation {
-                    time: bone.time,
-                    translation,
-                });
+                let translation = smf::CONVERT.project_point3(translation).to_array();
+                let translations = translations.entry(bone_id).or_default();
+                translations.0.push(time);
+                translations.1.push(translation);
             }
 
             if let Some(rotation) = bone.rotation {
-                let rotations = rotations.entry(bone.bone_index).or_default();
-
                 // Convert the rotation to right-handed y-up.
                 let rotation_z_to_y = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
                 let transformed_quaternion = rotation_z_to_y * rotation;
@@ -154,11 +158,9 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
                     transformed_quaternion.w,
                 );
 
-                rotations.push(TimedRotation {
-                    time: bone.time,
-                    _padding: [0.0; 3],
-                    rotation,
-                });
+                let rotations = rotations.entry(bone_id).or_default();
+                rotations.0.push(time);
+                rotations.1.push(rotation.to_array());
             }
         }
     }
@@ -171,13 +173,13 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
     // println!("{:#?}", rotations);
 
     // Translations
-    for (bone, translations) in translations.iter() {
-        let buffer = root.push(create_buffer(translations.as_slice()));
+    for (bone, (times, values)) in translations.iter() {
+        let buffer = root.push(create_buffer(times.as_slice()));
         let times_view = root.push(View {
             buffer,
-            byte_length: std::mem::size_of_val(translations.as_slice()).into(),
+            byte_length: std::mem::size_of_val(times.as_slice()).into(),
             byte_offset: None,
-            byte_stride: Some(Stride(std::mem::size_of::<TimedTranslation>())),
+            byte_stride: None,
             name: None,
             target: None,
             extensions: None,
@@ -187,8 +189,8 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
         let times_accessor = root.push(Accessor {
             buffer_view: Some(times_view),
             byte_offset: None,
-            count: translations.len().into(),
-            component_type: Checked::Valid(GenericComponentType(ComponentType::U32)),
+            count: times.len().into(),
+            component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
             extensions: None,
             extras: None,
             type_: Checked::Valid(accessor::Type::Scalar),
@@ -199,11 +201,12 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
             sparse: None,
         });
 
+        let values_buffer = root.push(create_buffer(values.as_slice()));
         let translations_view = root.push(View {
-            buffer,
-            byte_length: std::mem::size_of_val(translations.as_slice()).into(),
-            byte_offset: Some(std::mem::size_of::<f32>().into()),
-            byte_stride: Some(Stride(std::mem::size_of::<TimedTranslation>())),
+            buffer: values_buffer,
+            byte_length: std::mem::size_of_val(values.as_slice()).into(),
+            byte_offset: None,
+            byte_stride: None,
             name: None,
             target: None,
             extensions: None,
@@ -213,7 +216,7 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
         let translations_accessor = root.push(Accessor {
             buffer_view: Some(translations_view),
             byte_offset: None,
-            count: translations.len().into(),
+            count: values.len().into(),
             component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
             extensions: None,
             extras: None,
@@ -250,13 +253,13 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
     }
 
     // Rotations
-    for (bone, rotations) in rotations.iter() {
-        let buffer = root.push(create_buffer(rotations.as_slice()));
+    for (bone, (times, values)) in rotations.iter() {
+        let buffer = root.push(create_buffer(times.as_slice()));
         let times_view = root.push(View {
             buffer,
-            byte_length: std::mem::size_of_val(rotations.as_slice()).into(),
+            byte_length: std::mem::size_of_val(times.as_slice()).into(),
             byte_offset: None,
-            byte_stride: Some(Stride(std::mem::size_of::<TimedRotation>())),
+            byte_stride: None,
             name: None,
             target: None,
             extensions: None,
@@ -266,8 +269,8 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
         let times_accessor = root.push(Accessor {
             buffer_view: Some(times_view),
             byte_offset: None,
-            count: rotations.len().into(),
-            component_type: Checked::Valid(GenericComponentType(ComponentType::U32)),
+            count: times.len().into(),
+            component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
             extensions: None,
             extras: None,
             type_: Checked::Valid(accessor::Type::Scalar),
@@ -278,11 +281,12 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
             sparse: None,
         });
 
+        let values_buffer = root.push(create_buffer(values.as_slice()));
         let rotations_view = root.push(View {
-            buffer,
-            byte_length: std::mem::size_of_val(rotations.as_slice()).into(),
-            byte_offset: Some(std::mem::size_of::<Vec4>().into()),
-            byte_stride: Some(Stride(std::mem::size_of::<TimedRotation>())),
+            buffer: values_buffer,
+            byte_length: std::mem::size_of_val(values.as_slice()).into(),
+            byte_offset: None,
+            byte_stride: None,
             name: None,
             target: None,
             extensions: None,
@@ -292,7 +296,7 @@ fn add_animation(root: &mut Root, motion: &bmf::Motion, bone_lookup: &HashMap<u3
         let rotations_accessor = root.push(Accessor {
             buffer_view: Some(rotations_view),
             byte_offset: None,
-            count: rotations.len().into(),
+            count: values.len().into(),
             component_type: Checked::Valid(GenericComponentType(ComponentType::F32)),
             extensions: None,
             extras: None,
