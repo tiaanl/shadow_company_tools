@@ -1,4 +1,3 @@
-use byteorder::{LittleEndian as LE, ReadBytesExt};
 use glam::{Mat4, Quat, Vec2, Vec3, Vec4};
 
 use crate::io::Reader;
@@ -36,20 +35,17 @@ impl Model {
 
         let smf_version = smf_version(&r.read_fixed_string(16)?);
         if smf_version == 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Invalid SMF version.",
-            ));
+            return Err(std::io::Error::other("Invalid SMF version."));
         };
 
         let name = r.read_fixed_string(128)?;
 
         let scale = r.read_vec3()?;
 
-        let _ = r.read_f32::<LE>()?; // usually == 1.0
-        let _ = r.read_u32::<LE>()?; // usually == 1
+        let _ = r.read_f32()?; // usually == 1.0
+        let _ = r.read_u32()?; // usually == 1
 
-        let node_count = r.read_u32::<LE>()?;
+        let node_count = r.read_u32()?;
 
         let mut nodes = Vec::with_capacity(node_count as usize);
         for _ in 0..node_count {
@@ -76,10 +72,10 @@ pub struct Face {
 
 impl Face {
     fn read(r: &mut impl Reader) -> std::io::Result<Self> {
-        let index = r.read_u32::<LE>()?;
-        let i0 = r.read_u32::<LE>()?;
-        let i1 = r.read_u32::<LE>()?;
-        let i2 = r.read_u32::<LE>()?;
+        let index = r.read_u32()?;
+        let i0 = r.read_u32()?;
+        let i1 = r.read_u32()?;
+        let i2 = r.read_u32()?;
 
         Ok(Face {
             index,
@@ -93,8 +89,8 @@ impl Mesh {
         let name = r.read_fixed_string(128)?;
         let texture_name = r.read_fixed_string(128)?;
 
-        let vertex_count = r.read_u32::<LE>()?;
-        let face_count = r.read_u32::<LE>()?;
+        let vertex_count = r.read_u32()?;
+        let face_count = r.read_u32()?;
 
         let mut vertices = Vec::with_capacity(vertex_count as usize);
         for _ in 0..vertex_count {
@@ -125,14 +121,14 @@ pub struct Vertex {
 
 impl Vertex {
     fn read(r: &mut impl Reader) -> std::io::Result<Self> {
-        let index = r.read_u32::<LE>()?;
+        let index = r.read_u32()?;
 
         let position = r.read_vec3()?;
 
-        let u1 = r.read_i32::<LE>()?; // usually == -1
-        let u2 = r.read_f32::<LE>()?; // usually == 0.0
+        let u1 = r.read_u32()?; // usually == 0xFFFF_FFFF
+        let u2 = r.read_f32()?; // usually == 0.0
 
-        assert!(u1 == -1);
+        assert!(u1 == 0xFFFF_FFFF);
         assert!(u2 == 0.0);
 
         let tex_coord = r.read_vec2()?;
@@ -159,7 +155,7 @@ impl BoundingBox {
     fn read(c: &mut impl Reader) -> std::io::Result<Self> {
         let max = c.read_vec3()?;
         let min = c.read_vec3()?;
-        let u0 = c.read_f32::<LE>()?;
+        let u0 = c.read_f32()?;
 
         Ok(BoundingBox { max, min, u0 })
     }
@@ -181,16 +177,17 @@ impl Node {
         let name = r.read_fixed_string(128)?;
         let parent_name = r.read_fixed_string(128)?;
 
-        let bone_index = r.read_u32::<LE>()?; // usually == 0.0
+        let bone_index = r.read_u32()?; // usually == 0.0
 
         let position = r.read_vec3()?;
-        let rotation = r.read_quat()?;
+        // SMF stores node rotations as xyzw.
+        let rotation = Quat::from_xyzw(r.read_f32()?, r.read_f32()?, r.read_f32()?, r.read_f32()?);
 
-        let mesh_count = r.read_u32::<LE>()?;
-        let bounding_box_count = r.read_u32::<LE>()?;
+        let mesh_count = r.read_u32()?;
+        let bounding_box_count = r.read_u32()?;
 
         if smf_version > 1 {
-            let _ = r.read_u32::<LE>()?;
+            let _ = r.read_u32()?;
         }
 
         let mut meshes = Vec::with_capacity(mesh_count as usize);

@@ -1,5 +1,3 @@
-use byteorder::ReadBytesExt;
-
 use crate::io::Reader;
 
 const HASH_LOOKUP_TABLE: [u16; 256] = [

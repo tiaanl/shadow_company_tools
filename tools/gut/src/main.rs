@@ -53,7 +53,7 @@ fn list(path: impl AsRef<Path>) {
     }
 }
 
-fn extract(path: impl AsRef<Path>, out_dir: impl AsRef<Path>) {
+fn extract(path: impl AsRef<Path>, _out_dir: impl AsRef<Path>) {
     let gut_file_paths = if path.as_ref().is_dir() {
         walkdir::WalkDir::new(path.as_ref())
             .into_iter()
@@ -68,7 +68,7 @@ fn extract(path: impl AsRef<Path>, out_dir: impl AsRef<Path>) {
     for gut_file_path in gut_file_paths {
         println!("Extracting contents of {}", gut_file_path.display());
         let mut file = std::fs::File::open(gut_file_path).unwrap();
-        let mut gut_file = GutFile::open(&mut file).unwrap();
+        let gut_file = GutFile::open(&mut file).unwrap();
 
         for entry in gut_file.entries() {
             let entry_path = entry
@@ -76,7 +76,7 @@ fn extract(path: impl AsRef<Path>, out_dir: impl AsRef<Path>) {
                 .split(r"\")
                 .collect::<Vec<_>>()
                 .join(std::path::MAIN_SEPARATOR_STR);
-            let full_path = out_dir.as_ref().join(&entry_path);
+            let _full_path = _out_dir.as_ref().join(&entry_path);
             println!("  - {}", entry_path);
             // std::fs::create_dir_all(full_path.parent().unwrap()).unwrap();
             // std::fs::write(full_path, gut_file.get_contents(&entry)).unwrap();

@@ -158,6 +158,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "shadow_company_tools",
+ "walkdir",
 ]
 
 [[package]]
@@ -1184,6 +1185,20 @@ name = "smf2gltf"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "clap",
+ "gltf-json",
+ "image",
+ "pathdiff",
+ "shadow_company_tools",
+ "walkdir",
+]
+
+[[package]]
+name = "smf2uegltf"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "bytemuck",
  "clap",
  "gltf-json",
  "image",

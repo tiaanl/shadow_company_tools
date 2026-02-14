@@ -1,4 +1,3 @@
-use byteorder::{LittleEndian as LE, ReadBytesExt};
 use thiserror::Error;
 
 use crate::{common::hash, io::Reader};
@@ -53,7 +52,7 @@ fn read_entries(reader: &mut impl Reader) -> std::io::Result<Vec<Entry>> {
     // 4 - file count
     // 32 - filename
 
-    let file_count = reader.read_u32::<LE>()?;
+    let file_count = reader.read_u32()?;
     let _filename = reader.read_fixed_string(32)?;
 
     let header_size = reader.stream_position()?;
@@ -67,11 +66,11 @@ fn read_entries(reader: &mut impl Reader) -> std::io::Result<Vec<Entry>> {
     // 4 - hash
 
     for _ in 0..file_count {
-        let filename_length = reader.read_u32::<LE>()?;
-        let file_size = reader.read_u32::<LE>()?;
-        let file_offset = reader.read_u32::<LE>()?;
-        let is_text = reader.read_u32::<LE>()? != 0;
-        let filename_hash = reader.read_u32::<LE>()?;
+        let filename_length = reader.read_u32()?;
+        let file_size = reader.read_u32()?;
+        let file_offset = reader.read_u32()?;
+        let is_text = reader.read_u32()? != 0;
+        let filename_hash = reader.read_u32()?;
         let mut encrypted_filename = vec![0; filename_length as usize];
         reader.read_exact(&mut encrypted_filename)?;
         crate::common::decrypt_buf(encrypted_filename.as_mut());

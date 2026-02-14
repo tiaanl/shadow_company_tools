@@ -12,7 +12,7 @@ use gltf_json::{
     validation::{Checked, USize64},
     Accessor, Animation, Buffer, Index, Node, Root, Scene,
 };
-use shadow_company_tools::{bmf, smf, Quat, Vec3};
+use shadow_company_tools::{bmf, smf, Mat4, Quat, Vec3};
 
 #[derive(Parser)]
 struct Opts {
@@ -23,6 +23,9 @@ struct Opts {
     /// Frames per second for keyframe times (bmf times are frame numbers).
     #[arg(long, default_value_t = 30.0)]
     fps: f32,
+    /// Scale to apply to translations to match smf2gltf output.
+    #[arg(long, default_value_t = 1.0)]
+    scale: f32,
 }
 
 #[derive(Clone, Copy, NoUninit)]
@@ -59,9 +62,15 @@ fn main() {
     let mut root = Root::default();
 
     assert_eq!(smf.nodes[0].parent_name, "<root>");
-    let root_index = add_node(&mut root, smf.nodes.as_slice(), 0, &mut bone_lookup);
+    let root_index = add_node(
+        &mut root,
+        smf.nodes.as_slice(),
+        0,
+        &mut bone_lookup,
+        opts.scale,
+    );
 
-    add_animation(&mut root, &bmf, &bone_lookup, opts.fps);
+    add_animation(&mut root, &bmf, &bone_lookup, opts.fps, opts.scale);
 
     root.push(Scene {
         extensions: None,
@@ -82,6 +91,7 @@ fn add_node(
     nodes: &[smf::Node],
     node_index: usize,
     bone_lookup: &mut HashMap<u32, Index<Node>>,
+    scale: f32,
 ) -> Index<Node> {
     let node = &nodes[node_index];
 
@@ -89,9 +99,10 @@ fn add_node(
         .iter()
         .enumerate()
         .filter(|(_, n)| n.parent_name == node.name)
-        .map(|(i, _)| add_node(root, nodes, i, bone_lookup))
+        .map(|(i, _)| add_node(root, nodes, i, bone_lookup, scale))
         .collect();
 
+    let translation = convert_position(node.position, scale).to_array();
     let index = root.push(Node {
         camera: None,
         children: Some(children),
@@ -102,7 +113,7 @@ fn add_node(
         name: Some(node.name.clone()),
         rotation: None,
         scale: None,
-        translation: Some(smf::CONVERT.project_point3(node.position).to_array()),
+        translation: Some(translation),
         skin: None,
         weights: None,
     });
@@ -117,6 +128,7 @@ fn add_animation(
     motion: &bmf::Motion,
     bone_lookup: &HashMap<u32, Index<Node>>,
     fps: f32,
+    scale: f32,
 ) {
     let mut animation = Animation {
         extensions: None,
@@ -141,7 +153,7 @@ fn add_animation(
                 .unwrap_or(bone.bone_id);
             let time = frame_to_seconds(bone.time);
             if let Some(translation) = bone.position {
-                let translation = smf::CONVERT.project_point3(translation).to_array();
+                let translation = convert_position(translation, scale).to_array();
                 let translations = translations.entry(bone_id).or_default();
                 translations.0.push(time);
                 translations.1.push(translation);
@@ -333,6 +345,11 @@ fn add_animation(
     }
 
     root.push(animation);
+}
+
+fn convert_position(value: Vec3, scale: f32) -> Vec3 {
+    let m = smf::CONVERT * Mat4::from_scale(Vec3::splat(scale));
+    m.project_point3(value)
 }
 
 fn create_buffer<T>(buffer: &[T]) -> Buffer

@@ -32,4 +32,8 @@ members = [
     "tools/raw2png",
     "tools/smf",
     "tools/smf2gltf",
+    "tools/smf2uegltf",
 ]
+
+[workspace.dependencies]
+walkdir = "2.5"

@@ -1,5 +1,3 @@
-use byteorder::ReadBytesExt;
-
 use crate::io::Reader;
 
 #[derive(Debug)]

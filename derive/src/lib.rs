@@ -86,7 +86,7 @@ impl ConfigType<'_> {
     }
 }
 
-fn native_type_from_type(ty: &syn::Type) -> Option<ConfigType> {
+fn native_type_from_type(ty: &syn::Type) -> Option<ConfigType<'_>> {
     if let syn::Type::Path(type_path) = ty {
         if let Some(ident) = type_path.path.get_ident() {
             if type_path.path.is_ident("String") {
@@ -216,7 +216,7 @@ fn get_assignment_value(assign: &syn::ExprAssign) -> Result<(syn::Path, String),
     Ok((path.path.clone(), str.value()))
 }
 
-fn build_fields(fields: &syn::Fields) -> Result<Vec<Field>, syn::Error> {
+fn build_fields(fields: &syn::Fields) -> Result<Vec<Field<'_>>, syn::Error> {
     let mut result = vec![];
 
     for field in fields.iter() {

@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use byteorder::{LittleEndian as LE, ReadBytesExt};
-use glam::{Quat, Vec2, Vec3};
+use glam::{Vec2, Vec3};
 
 fn change_separator(path: impl AsRef<Path>, separator: char) -> PathBuf {
     PathBuf::from(
@@ -29,25 +28,32 @@ impl PathExt for Path {
 }
 
 pub trait Reader: std::io::Read + std::io::Seek + Sized {
+    #[inline]
+    fn read_u8(&mut self) -> std::io::Result<u8> {
+        byteorder::ReadBytesExt::read_u8(self)
+    }
+
+    #[inline]
+    fn read_u32(&mut self) -> std::io::Result<u32> {
+        byteorder::ReadBytesExt::read_u32::<byteorder::LittleEndian>(self)
+    }
+
+    #[inline]
+    fn read_f32(&mut self) -> std::io::Result<f32> {
+        byteorder::ReadBytesExt::read_f32::<byteorder::LittleEndian>(self)
+    }
+
     fn read_vec2(&mut self) -> std::io::Result<Vec2> {
-        let x = self.read_f32::<LE>()?;
-        let y = self.read_f32::<LE>()?;
+        let x = self.read_f32()?;
+        let y = self.read_f32()?;
         Ok(Vec2::new(x, y))
     }
 
     fn read_vec3(&mut self) -> std::io::Result<Vec3> {
-        let x = self.read_f32::<LE>()?;
-        let y = self.read_f32::<LE>()?;
-        let z = self.read_f32::<LE>()?;
+        let x = self.read_f32()?;
+        let y = self.read_f32()?;
+        let z = self.read_f32()?;
         Ok(Vec3::new(x, y, z))
-    }
-
-    fn read_quat(&mut self) -> std::io::Result<Quat> {
-        let x = self.read_f32::<LE>()?;
-        let y = self.read_f32::<LE>()?;
-        let z = self.read_f32::<LE>()?;
-        let w = self.read_f32::<LE>()?;
-        Ok(Quat::from_xyzw(x, y, z, w))
     }
 
     fn read_fixed_string(&mut self, len: usize) -> std::io::Result<String> {

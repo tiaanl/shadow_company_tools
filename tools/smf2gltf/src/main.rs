@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use gltf_json::{self as json, scene::UnitQuaternion};
 use image::ImageFormat;
 use json::{
@@ -28,6 +28,18 @@ struct Opts {
     scale: f32,
     #[arg(short, long)]
     verbose: bool,
+    /// How to export meshes: attach to nodes or export a skeleton with skinning.
+    #[arg(long, value_enum, default_value_t = NodeMode::Nodes)]
+    node_mode: NodeMode,
+    /// Apply SMF rotations to skeleton joints (enable with --skeleton-rotations).
+    #[arg(long, default_value_t = false)]
+    skeleton_rotations: bool,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum NodeMode {
+    Nodes,
+    Skeleton,
 }
 
 fn main() {
@@ -84,6 +96,10 @@ struct VV {
     _uv: [f32; 3],
 }
 
+struct NodeTransform {
+    local_matrix: Mat4,
+}
+
 fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -> json::Root {
     let mut root = json::Root::default();
 
@@ -91,6 +107,9 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
     let mut node_indices = HashMap::new();
 
     let mut material_indices = HashMap::new();
+
+    let skeleton_mode = matches!(opts.node_mode, NodeMode::Skeleton);
+    let use_joint_rotations = skeleton_mode && opts.skeleton_rotations;
 
     let convert_position = |v: Vec3| {
         let m = CONVERT * Mat4::from_scale(Vec3::splat(opts.scale));
@@ -108,22 +127,226 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
         )
     };
 
+    let mut name_to_smf_index = HashMap::new();
+    for (index, smf_node) in scene.nodes.iter().enumerate() {
+        name_to_smf_index.insert(smf_node.name.clone(), index);
+    }
+
+    let mut node_translations = Vec::with_capacity(scene.nodes.len());
+    let mut joint_rotations = Vec::new();
+    let mut parent_indices = Vec::with_capacity(scene.nodes.len());
     for smf_node in scene.nodes.iter() {
+        let translation = convert_position(smf_node.position);
+        node_translations.push(translation);
+
+        if skeleton_mode {
+            let joint_rotation = if use_joint_rotations {
+                convert_rotation(smf_node.rotation)
+            } else {
+                Quat::IDENTITY
+            };
+            joint_rotations.push(joint_rotation);
+        }
+
+        let parent_index = if smf_node.parent_name == "<root>" {
+            None
+        } else {
+            Some(
+                *name_to_smf_index
+                    .get(&smf_node.parent_name)
+                    .expect("parent node not found"),
+            )
+        };
+        parent_indices.push(parent_index);
+    }
+
+    let mut joint_translations = Vec::new();
+    let mut joint_transforms = Vec::new();
+    let mut mesh_transforms = Vec::new();
+    if skeleton_mode {
+        joint_translations = if use_joint_rotations {
+            compute_joint_translations(&node_translations, &joint_rotations, &parent_indices)
+        } else {
+            node_translations.clone()
+        };
+
+        joint_transforms.reserve(scene.nodes.len());
+        mesh_transforms.reserve(scene.nodes.len());
+        for index in 0..scene.nodes.len() {
+            let joint_rotation = joint_rotations[index];
+            let joint_translation = joint_translations[index];
+            let joint_local_matrix =
+                Mat4::from_rotation_translation(joint_rotation, joint_translation);
+            joint_transforms.push(NodeTransform {
+                local_matrix: joint_local_matrix,
+            });
+
+            let mesh_local_matrix = Mat4::from_translation(node_translations[index]);
+            mesh_transforms.push(NodeTransform {
+                local_matrix: mesh_local_matrix,
+            });
+        }
+    }
+
+    let joint_global_transforms = if skeleton_mode {
+        Some(compute_global_transforms(&joint_transforms, &parent_indices))
+    } else {
+        None
+    };
+
+    let mesh_global_transforms = if skeleton_mode {
+        Some(compute_global_transforms(&mesh_transforms, &parent_indices))
+    } else {
+        None
+    };
+
+    if skeleton_mode && scene.nodes.len() > u16::MAX as usize {
+        panic!("Too many joints for u16 joint indices.");
+    }
+
+    let mut joint_nodes = Vec::with_capacity(scene.nodes.len());
+    for (node_i, smf_node) in scene.nodes.iter().enumerate() {
         let mut node = json::Node {
-            translation: Some(convert_position(smf_node.position).to_array()),
+            translation: Some(
+                if skeleton_mode {
+                    joint_translations[node_i]
+                } else {
+                    node_translations[node_i]
+                }
+                .to_array(),
+            ),
             name: Some(smf_node.name.clone()),
             ..Default::default()
+        };
+
+        if skeleton_mode {
+            node.rotation = Some(UnitQuaternion(joint_rotations[node_i].to_array()));
+        }
+
+        let node_index = root.push(node);
+        node_indices.insert(smf_node.name.clone(), node_index);
+        joint_nodes.push(node_index);
+        if smf_node.parent_name == "<root>" {
+            root_index = Some(node_index);
+        }
+    }
+
+    for smf_node in scene.nodes.iter() {
+        if smf_node.parent_name == "<root>" {
+            continue;
+        }
+
+        let Some(index) = node_indices.get(&smf_node.name) else {
+            panic!("node index not found");
+        };
+
+        let Some(parent_index) = node_indices.get(&smf_node.parent_name) else {
+            panic!("parent index not found!");
+        };
+
+        let Some(parent) = root.nodes.get_mut(parent_index.value()) else {
+            panic!("parent node not found!");
+        };
+
+        if let Some(ref mut children) = parent.children {
+            children.push(*index);
+        } else {
+            parent.children = Some(vec![*index]);
+        }
+    }
+
+    let root_index = root_index.expect("no root node found");
+
+    let skin_index = if skeleton_mode {
+        let joint_global_transforms = joint_global_transforms
+            .as_ref()
+            .expect("missing joint global transforms");
+        let inverse_bind_matrices = joint_global_transforms
+            .iter()
+            .map(|transform| transform.inverse().to_cols_array())
+            .collect::<Vec<_>>();
+        let inverse_bind_count = inverse_bind_matrices.len();
+
+        let buffer = create_buffer(inverse_bind_matrices);
+        let byte_length = buffer.byte_length;
+        let buffer = root.push(buffer);
+
+        let buffer_view = root.push(json::buffer::View {
+            buffer,
+            byte_length,
+            byte_offset: None,
+            byte_stride: None,
+            extensions: Default::default(),
+            extras: Default::default(),
+            name: None,
+            target: None,
+        });
+
+        let inverse_bind_matrices = root.push(json::Accessor {
+            buffer_view: Some(buffer_view),
+            byte_offset: Some(USize64(0)),
+            count: USize64::from(inverse_bind_count),
+            component_type: Valid(json::accessor::GenericComponentType(
+                json::accessor::ComponentType::F32,
+            )),
+            extensions: Default::default(),
+            extras: Default::default(),
+            type_: Valid(json::accessor::Type::Mat4),
+            min: None,
+            max: None,
+            name: None,
+            normalized: false,
+            sparse: None,
+        });
+
+        Some(root.push(json::Skin {
+            inverse_bind_matrices: Some(inverse_bind_matrices),
+            skeleton: Some(root_index),
+            joints: joint_nodes.clone(),
+            name: None,
+            extensions: Default::default(),
+            extras: Default::default(),
+        }))
+    } else {
+        None
+    };
+
+    let mut mesh_node_indices = Vec::new();
+
+    for (node_i, smf_node) in scene.nodes.iter().enumerate() {
+        let node_global_transform = if skeleton_mode {
+            Some(
+                mesh_global_transforms
+                    .as_ref()
+                    .expect("missing mesh global transforms")[node_i],
+            )
+        } else {
+            None
+        };
+        let joint_index = if skeleton_mode {
+            Some(u16::try_from(node_i).expect("Joint index exceeds u16."))
+        } else {
+            None
         };
 
         for smf_mesh in smf_node.meshes.iter() {
             let smf_vertices = smf_mesh
                 .vertices
                 .iter()
-                .map(|v| VV {
-                    position: convert_position(v.position).to_array(),
-                    // Normals are inverted for some reason?
-                    _normal: CONVERT_NORMAL.project_point3(-v.normal).to_array(),
-                    _uv: [v.tex_coord.x, v.tex_coord.y, 0.0],
+                .map(|v| {
+                    let mut position = convert_position(v.position);
+                    let mut normal = CONVERT_NORMAL.project_point3(-v.normal);
+
+                    if let Some(transform) = node_global_transform {
+                        position = transform.transform_point3(position);
+                        normal = transform.transform_vector3(normal).normalize();
+                    }
+
+                    VV {
+                        position: position.to_array(),
+                        _normal: normal.to_array(),
+                        _uv: [v.tex_coord.x, v.tex_coord.y, 0.0],
+                    }
                 })
                 .collect::<Vec<_>>();
             let vertex_count = smf_vertices.len();
@@ -197,6 +420,76 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
                 normalized: false,
                 sparse: None,
             });
+
+            let (joints, weights) = if let Some(joint_index) = joint_index {
+                let joints_data = vec![[joint_index, 0, 0, 0]; vertex_count];
+                let joints_buffer = create_buffer(joints_data);
+                let joints_byte_length = joints_buffer.byte_length;
+                let joints_buffer = root.push(joints_buffer);
+                let joints_view = root.push(json::buffer::View {
+                    buffer: joints_buffer,
+                    byte_length: joints_byte_length,
+                    byte_offset: None,
+                    byte_stride: None,
+                    name: None,
+                    target: Some(Valid(json::buffer::Target::ArrayBuffer)),
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                });
+
+                let joints_accessor = root.push(json::Accessor {
+                    buffer_view: Some(joints_view),
+                    byte_offset: Some(USize64(0)),
+                    count: USize64::from(vertex_count),
+                    component_type: Valid(json::accessor::GenericComponentType(
+                        json::accessor::ComponentType::U16,
+                    )),
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                    type_: Valid(json::accessor::Type::Vec4),
+                    min: None,
+                    max: None,
+                    name: None,
+                    normalized: false,
+                    sparse: None,
+                });
+
+                let weights_data = vec![[1.0_f32, 0.0, 0.0, 0.0]; vertex_count];
+                let weights_buffer = create_buffer(weights_data);
+                let weights_byte_length = weights_buffer.byte_length;
+                let weights_buffer = root.push(weights_buffer);
+                let weights_view = root.push(json::buffer::View {
+                    buffer: weights_buffer,
+                    byte_length: weights_byte_length,
+                    byte_offset: None,
+                    byte_stride: None,
+                    name: None,
+                    target: Some(Valid(json::buffer::Target::ArrayBuffer)),
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                });
+
+                let weights_accessor = root.push(json::Accessor {
+                    buffer_view: Some(weights_view),
+                    byte_offset: Some(USize64(0)),
+                    count: USize64::from(vertex_count),
+                    component_type: Valid(json::accessor::GenericComponentType(
+                        json::accessor::ComponentType::F32,
+                    )),
+                    extensions: Default::default(),
+                    extras: Default::default(),
+                    type_: Valid(json::accessor::Type::Vec4),
+                    min: None,
+                    max: None,
+                    name: None,
+                    normalized: false,
+                    sparse: None,
+                });
+
+                (Some(joints_accessor), Some(weights_accessor))
+            } else {
+                (None, None)
+            };
 
             let indices = {
                 let indices = smf_mesh
@@ -327,6 +620,12 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
                     map.insert(Valid(json::mesh::Semantic::Positions), positions);
                     map.insert(Valid(json::mesh::Semantic::Normals), normals);
                     map.insert(Valid(json::mesh::Semantic::TexCoords(0)), uvs);
+                    if let Some(joints) = joints {
+                        map.insert(Valid(json::mesh::Semantic::Joints(0)), joints);
+                    }
+                    if let Some(weights) = weights {
+                        map.insert(Valid(json::mesh::Semantic::Weights(0)), weights);
+                    }
                     map
                 },
                 extensions: Default::default(),
@@ -348,54 +647,40 @@ fn smf_to_gltf_json(scene: smf::Model, to_path: impl AsRef<Path>, opts: &Opts) -
             let node_index = root.push(json::Node {
                 mesh: Some(mesh_index),
                 name: Some(smf_mesh.name.clone()),
+                skin: skin_index,
                 ..Default::default()
             });
 
-            if let Some(ref mut children) = node.children {
-                children.push(node_index);
+            if skeleton_mode {
+                mesh_node_indices.push(node_index);
             } else {
-                node.children = Some(vec![node_index]);
+                let Some(parent_index) = node_indices.get(&smf_node.name) else {
+                    panic!("node index not found");
+                };
+
+                let Some(parent) = root.nodes.get_mut(parent_index.value()) else {
+                    panic!("parent node not found!");
+                };
+
+                if let Some(ref mut children) = parent.children {
+                    children.push(node_index);
+                } else {
+                    parent.children = Some(vec![node_index]);
+                }
             }
         }
-
-        let node_index = root.push(node);
-        node_indices.insert(smf_node.name.clone(), node_index);
-        if smf_node.parent_name == "<root>" {
-            root_index = Some(node_index);
-        }
     }
 
-    for smf_node in scene.nodes.iter() {
-        if smf_node.parent_name == "<root>" {
-            continue;
-        }
-
-        let Some(index) = node_indices.get(&smf_node.name) else {
-            panic!("node index not found");
-        };
-
-        let Some(parent_index) = node_indices.get(&smf_node.parent_name) else {
-            panic!("parent index not found!");
-        };
-
-        let Some(parent) = root.nodes.get_mut(parent_index.value()) else {
-            panic!("parent node not found!");
-        };
-
-        if let Some(ref mut children) = parent.children {
-            children.push(*index);
-        } else {
-            parent.children = Some(vec![*index]);
-        }
+    let mut scene_nodes = vec![root_index];
+    if skeleton_mode {
+        scene_nodes.extend(mesh_node_indices);
     }
-
-    let root_index = root_index.expect("no root node found");
 
     root.push(json::Scene {
         extensions: Default::default(),
         extras: Default::default(),
         name: Some(scene.name.clone()),
-        nodes: vec![root_index],
+        nodes: scene_nodes,
     });
 
     root
@@ -422,6 +707,100 @@ fn bounding_coords(points: &[VV]) -> ([f32; 3], [f32; 3]) {
         }
     }
     (min, max)
+}
+
+fn compute_global_transforms(
+    transforms: &[NodeTransform],
+    parent_indices: &[Option<usize>],
+) -> Vec<Mat4> {
+    let mut globals = vec![Mat4::IDENTITY; transforms.len()];
+    let mut visited = vec![false; transforms.len()];
+
+    fn visit(
+        index: usize,
+        transforms: &[NodeTransform],
+        parent_indices: &[Option<usize>],
+        globals: &mut [Mat4],
+        visited: &mut [bool],
+    ) {
+        if visited[index] {
+            return;
+        }
+
+        let global = if let Some(parent_index) = parent_indices[index] {
+            visit(parent_index, transforms, parent_indices, globals, visited);
+            globals[parent_index] * transforms[index].local_matrix
+        } else {
+            transforms[index].local_matrix
+        };
+
+        globals[index] = global;
+        visited[index] = true;
+    }
+
+    for index in 0..transforms.len() {
+        visit(index, transforms, parent_indices, &mut globals, &mut visited);
+    }
+
+    globals
+}
+
+fn compute_joint_translations(
+    translations: &[Vec3],
+    rotations: &[Quat],
+    parent_indices: &[Option<usize>],
+) -> Vec<Vec3> {
+    let mut adjusted = vec![Vec3::ZERO; translations.len()];
+    let mut global_rotations = vec![Quat::IDENTITY; translations.len()];
+    let mut visited = vec![false; translations.len()];
+
+    fn visit(
+        index: usize,
+        translations: &[Vec3],
+        rotations: &[Quat],
+        parent_indices: &[Option<usize>],
+        adjusted: &mut [Vec3],
+        global_rotations: &mut [Quat],
+        visited: &mut [bool],
+    ) {
+        if visited[index] {
+            return;
+        }
+
+        if let Some(parent_index) = parent_indices[index] {
+            visit(
+                parent_index,
+                translations,
+                rotations,
+                parent_indices,
+                adjusted,
+                global_rotations,
+                visited,
+            );
+            let parent_global_rotation = global_rotations[parent_index];
+            adjusted[index] = parent_global_rotation.inverse() * translations[index];
+            global_rotations[index] = parent_global_rotation * rotations[index];
+        } else {
+            adjusted[index] = translations[index];
+            global_rotations[index] = rotations[index];
+        }
+
+        visited[index] = true;
+    }
+
+    for index in 0..translations.len() {
+        visit(
+            index,
+            translations,
+            rotations,
+            parent_indices,
+            &mut adjusted,
+            &mut global_rotations,
+            &mut visited,
+        );
+    }
+
+    adjusted
 }
 
 fn to_padded_byte_vector<T>(vec: Vec<T>) -> Vec<u8> {
