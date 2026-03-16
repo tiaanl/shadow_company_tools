@@ -51,15 +51,16 @@ fn main() {
         let motion =
             shadow_company_tools::bmf::Motion::read(&mut file).expect("Could not read motion.");
 
-        println!("Motion: {} (0x{:08X})", motion.name, motion.name_hash);
+        println!("Motion: {} (0x{:08X})", motion.name, motion.hash);
         let from_state_name = motion_state_name(motion.from_state);
         let to_state_name = motion_state_name(motion.to_state);
         println!(
-            "  key_frame_count: {}, last_frame: {}, max_bones_per_frame: {}, playback_rate: {}",
+            "  flags: {:?}, key_frame_count: {}, last_frame: {}, max_bones_per_frame: {}, ticks_per_frame: {}",
+            motion.flags,
             motion.key_frame_count,
             motion.last_frame,
             motion.max_bones_per_frame,
-            motion.playback_rate,
+            motion.ticks_per_frame,
         );
         println!(
             "  state_transition: {} ({}) -> {} ({})",
@@ -71,16 +72,10 @@ fn main() {
         }
 
         motion.key_frames.iter().for_each(|kf| {
-            println!("  Time: {:3}", kf.frame); 
-            println!( 
-                "    lve: ({:8.03}, {:8.03}, {:8.03})  keyframe_data_ref: {:10}  bone_count: {:3}  reserved: ({}, {})",
-                kf.lve.x,
-                kf.lve.y,
-                kf.lve.z,
-                kf.keyframe_data_ref,
-                kf.bone_count,
-                kf.reserved_0,
-                kf.reserved_1
+            println!("  Time: {:3}", kf.frame);
+            println!(
+                "    lve: ({:8.03}, {:8.03}, {:8.03})  bone_count: {:3}  reserved: ({}, {})",
+                kf.lve.x, kf.lve.y, kf.lve.z, kf.bone_count, kf.reserved_0, kf.reserved_1
             );
 
             kf.bones.iter().for_each(|b| {
